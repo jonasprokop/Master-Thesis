@@ -1,0 +1,7 @@
+python-dotenv
+pyarrow
+pandas
+scikit-learn 
+pyodbc
+fastparquet
+sqlalchemy
