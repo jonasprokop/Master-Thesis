@@ -2,8 +2,9 @@ import pandas as pd
 import json
 import sqlalchemy as sql
 from sqlalchemy import Column, Integer, String
-from sqlalchemy import declarative_base, sessionmaker
-
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import unicodedata
 
 
 from loaders.database_conn import AzureLoader
@@ -12,17 +13,18 @@ from loaders.database_conn import AzureLoader
 class DatasetLoader():
     def __init__(self,
                 azure_connection_string,
+                list_of_tables_path,
                 dataset_path):
 
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
 
-        with open('tables.json', 'r') as json_config:
+        with open(list_of_tables_path, 'r', encoding="utf-8") as json_config:
             self._json_config = json.load(json_config)
 
         self._sqlalchemy_engine = sql.create_engine("sqlite:///:memory:")
-        self._Session = sessionmaker(bind=self._sqlalchemy_engine)
-        self._Base = declarative_base()
+        self._session = sessionmaker(bind=self._sqlalchemy_engine)
+        self._base = declarative_base()
         self._models = {}
 
         self.create_model_metadata()
@@ -53,33 +55,52 @@ class DatasetLoader():
         else:
             ValueError
 
+
     def load_and_print_tables_at_raw_data(self):
          for table in self._json_config:
              pd_data = self.load_raw_table_from_dataset(table)
              print(pd_data)
 
-
     def create_model_metadata(self):
         for table_name, columns in self._json_config.items():
             class_name = table_name.replace('.', '_')
-            attrs = {'__tablename__': class_name}
-            for column_name, _ in columns.items():
-                attrs[column_name] = Column(String) 
-            model_class = type(class_name, (self._Base,), attrs)
+            attrs = {'__tablename__': class_name, 'generated_unique_row_id': Column(Integer, primary_key=True)} 
+            for column_name, addit_info in columns.items():
+                column_name = self._strip_accents(column_name)
+                if column_name != 'generated_unique_row_id':
+                    attrs[column_name] = Column(String) 
+            model_class = type(class_name, (self._base,), attrs)
             self._models[table_name] = model_class
-        self._Base.metadata.create_all(self._sqlalchemy_engine)
+        self._base.metadata.create_all(self._sqlalchemy_engine)
 
     def populate_model_with_data(self):
         for table in self._json_config:
             pd_data = self.load_raw_table_from_dataset(table)
             model_class = self._models[table]
             for index, row in pd_data.iterrows():
-                model_instance = model_class(**row)
-                self.session.add(model_instance)
-            self.session.commit()
+                modified_row = {}
+                for column_name, value in row.items():
+                    modified_column_name = self._strip_accents(column_name)
+                    modified_row[modified_column_name] = value
+                model_instance = model_class(**modified_row)
+            self._session.add(model_instance)
+            self._session.commit()
           
     def create_model(self):
-        return self._sqlalchemy_engine, self._Session
+        return self._sqlalchemy_engine, self._session
+    
+
+
+
+
+
+
+
+
+
+
+    def _strip_accents(self, text):
+        return ''.join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
     
         
         
