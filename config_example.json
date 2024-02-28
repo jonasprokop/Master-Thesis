@@ -1,5 +1,4 @@
 {  
-    
 "[table_name]": {
     "column1": {},
     "column2": {},
@@ -10,5 +9,5 @@
     "column7": {},
     "column8": {}
   },
-"and so on"
+"and so on":""
 }

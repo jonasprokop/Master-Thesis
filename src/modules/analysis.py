@@ -2,7 +2,7 @@ from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 
 
-from modules.dataset import AzureLoader
+from modules.loader import AzureLoader
 
 class FeatureAnalysis():
     def __init__(self,

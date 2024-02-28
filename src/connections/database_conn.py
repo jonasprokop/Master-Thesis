@@ -22,5 +22,3 @@ class AzureLoader:
         pd_data = pd.read_sql(query, self._engine)
 
         return pd_data
-
-
