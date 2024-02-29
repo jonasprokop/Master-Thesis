@@ -1,13 +1,37 @@
 {  
 "[table_name]": {
-    "column1": {},
-    "column2": {},
-    "column3": {},
-    "column4": {},
-    "column5": {},
-    "column6": {},
-    "column7": {},
-    "column8": {}
+    "column1": {
+                "data_type":"Integer",
+                "":""
+    },
+    "column2": {
+                "data_type":"String",
+                "":""
+    },
+    "column3": {
+                "data_type":"String",
+                "":""
+    },
+    "column4": {
+                "data_type":"String",
+                "":""
+    },
+    "column5": {
+                "data_type":"String",
+                "":""
+    },
+    "column6": {
+                "data_type":"String",
+                "":""
+    },
+    "column7": {
+                "data_type":"String",
+                "":""
+    },
+    "column8": {
+                "data_type":"String",
+                "":""      
+    }
   },
 "and so on":""
 }

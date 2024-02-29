@@ -23,7 +23,11 @@ class DatasetMaker():
             attrs = {'__tablename__': class_name, 'generated_unique_row_id': Column(Integer, primary_key=True)} 
             for column_name, addit_info in columns.items():
                 column_name = self._dataset_loader._strip_accents(column_name)
-                if column_name != 'generated_unique_row_id':
+                data_type = addit_info['data_type']
+                if column_name != 'generated_unique_row_id' and data_type:
+                    column_type = getattr(sql, data_type)
+                    attrs[column_name] = Column(column_type)
+                elif column_name != 'generated_unique_row_id' and not data_type:
                     attrs[column_name] = Column(String) 
             model_class = type(class_name, (self._base,), attrs)
             self._models[table_name] = model_class
