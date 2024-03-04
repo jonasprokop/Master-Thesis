@@ -1,6 +1,8 @@
 .env
 .venv/
 .vscode/
-src/loaders/__pycache__/
+src/connections/__pycache__/
 src/modules/__pycache__/
-tables.json
+input_table_data.json
+transformation_data.json
+scheme_mapper.json

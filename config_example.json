@@ -1,37 +1,45 @@
 {  
-"[table_name]": {
+"table_name": {
     "column1": {
                 "data_type":"Integer",
+                "primary_key":"True",
                 "":""
     },
     "column2": {
                 "data_type":"String",
+                "primary_key":"False",
                 "":""
     },
     "column3": {
                 "data_type":"String",
+                "primary_key":"False",
                 "":""
     },
     "column4": {
                 "data_type":"String",
+                "primary_key":"False",
                 "":""
     },
     "column5": {
                 "data_type":"String",
+                "primary_key":"False",
                 "":""
     },
     "column6": {
                 "data_type":"String",
+                "primary_key":"False",
                 "":""
     },
     "column7": {
                 "data_type":"String",
+                "primary_key":"False",
                 "":""
     },
     "column8": {
                 "data_type":"String",
+                "primary_key":"False",
                 "":""      
     }
   },
-"and so on":""
+"....tablex":"columnx...y"
 }
