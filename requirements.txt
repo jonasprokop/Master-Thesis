@@ -5,3 +5,5 @@ scikit-learn
 pyodbc
 fastparquet
 sqlalchemy
+psycopg2
+pyyaml

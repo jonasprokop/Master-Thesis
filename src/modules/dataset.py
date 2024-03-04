@@ -7,9 +7,9 @@ from sqlalchemy.orm import sessionmaker
 
 class DatasetMaker():
     def __init__(self,
-                dataset_loader):
+                loader):
         
-        self._dataset_loader = dataset_loader
+        self._loader = loader
         self._sqlalchemy_engine = sql.create_engine("sqlite:///:memory:")
         self._base = declarative_base()
         self._models = {}
@@ -21,15 +21,17 @@ class DatasetMaker():
 
 
     def _create_model_metadata(self):
-        for table_name, columns in self._dataset_loader._json_config.items():
+        for table_name, columns in self._loader._json_config.items():
             class_name = table_name.replace('.', '_')
             attrs = {'__tablename__': class_name} 
+
+            has_primary_key = False
+
             for column_name, addit_info in columns.items():
 
-                column_name = self._dataset_loader._strip_accents(column_name)
+                column_name = self._loader._strip_accents(column_name)
                 data_type = addit_info['data_type']
                 primary_key = addit_info['primary_key']
-                has_primary_key = False
 
                 if data_type and primary_key:
                     column_type = getattr(sql, data_type)
@@ -55,30 +57,31 @@ class DatasetMaker():
         self._base.metadata.create_all(self._sqlalchemy_engine)
 
     def _populate_model_with_data(self):
-        for table in self._dataset_loader._json_config:
-            if table not in ["bilance_rozsireno", "predmety_total_Hkat_rozsireno"]:
-                pd_data = self._dataset_loader.load_raw_table_from_dataset(table)
-                model_class = self._models[table]
+        for table in self._loader._json_config:
+            pd_data = self._loader.load_raw_table_from_dataset(table)
+            model_class = self._models[table]
 
-                for index, row in pd_data.iterrows():
-                    try:
-                        if hasattr(model_class, 'generated_unique_row_id'):
-                            model_instance.generated_unique_row_id = index              
-                        model_instance = model_class(**row)
-                        self._session.add(model_instance)
-                        self._session.commit()
-                    except:
-                        print("Nonunique row found")
+            for index, row in pd_data.iterrows():
+                if hasattr(model_class, 'generated_unique_row_id'):
+                    model_instance.generated_unique_row_id = index              
+                model_instance = model_class(**row)
+                self._session.add(model_instance)
+                self._session.commit()
 
-
-                print(f"Model was populated with table {table}")
+            print(f"Model was populated with table {table}")
           
     
     def create_test_dataset(self):
-        for query_name, query_string in self._dataset_loader._transformation_data.items():
-            query = sql.text(query_string)
+        self.create_subjects_dataset()
 
-            with self._sqlalchemy_engine.begin() as session:
-                result = session.execute(query)  
-                for row in result:
-                    print(row)
+    def create_subjects_dataset(self):
+        print("this is gonna be fun")
+        for table_name, query_string in self._loader._transformation_data.items():
+            if "Subjects" in table_name:
+                query = sql.text(query_string)
+                with self._sqlalchemy_engine.begin() as session:
+                    result = session.execute(query)  
+                    pd_data = pd.DataFrame(result.fetchall(), columns=result.keys())
+                    print(pd_data)
+                    self._loader._save_table_to_parquet(table_name, pd_data)
+

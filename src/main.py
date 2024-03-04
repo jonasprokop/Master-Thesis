@@ -1,6 +1,6 @@
 import pandas as pd
 
-from modules.loader import DatasetLoader
+from modules.loader import Loader
 from modules.analysis import FeatureAnalysis
 from modules.dataset import DatasetMaker
 
@@ -11,22 +11,19 @@ analyze_dataset = False
 save_analysis = False
 analysis_target = ""
 
-
-
 if __name__ == "__main__":
 
-    dataset_loader = DatasetLoader()
+    loader = Loader()
 
     if reload_dataset:
-        dataset_loader.load_and_save_dataset()
-
-    dataset = DatasetMaker(dataset_loader)
+        loader.load_and_save_dataset()
 
     if remake_dataset:
+        dataset = DatasetMaker(loader)
         dataset.create_test_dataset()
 
     if analyze_dataset:
-        feature_analysis = FeatureAnalysis(dataset, analysis_target)
+        feature_analysis = FeatureAnalysis(loader, analysis_target)
 
 
 

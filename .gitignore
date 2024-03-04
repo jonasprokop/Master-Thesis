@@ -4,5 +4,5 @@
 src/connections/__pycache__/
 src/modules/__pycache__/
 input_table_data.json
-transformation_data.json
+transformation_data.yaml
 scheme_mapper.json

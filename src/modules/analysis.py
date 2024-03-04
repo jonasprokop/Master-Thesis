@@ -6,21 +6,13 @@ from modules.loader import AzureLoader
 
 class FeatureAnalysis():
     def __init__(self,
-                dataset,
-                table_to_analyze
+                loader,
+                analysis_target
                 ):
         
-        self._table_to_analyze = table_to_analyze
-        self._pd_data = dataset.load_raw_table_from_dataset(table_to_analyze)
-        
-        
+        self._loader = loader    
+        self._analysis = analysis_target
+    
     def select_k_best(self):
-        # Should make a table with possible columns to be dependent variable, 
-        # so probably make tables an csv with all the explicit info
-
-        print(self._pd_data )
-
-        for variable in self._pd_data.iterrows():
-            print(x)
-
+        print(x)
             
