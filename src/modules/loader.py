@@ -31,31 +31,46 @@ class Loader():
             query = f"SELECT * FROM {database_table_name}"
 
             pd_data = self._azure_loader.fetch_from_database(query)
+
+            print(f"Table {table} was downloaded from source db")
+
             pd_data.columns = [self._strip_accents(column) for column in pd_data.columns]
 
-            self._save_table_to_parquet(self, table, pd_data)
+            self.save_raw_table(self, table, pd_data)
 
-    def load_raw_table_from_dataset(self, table):
+    def load_raw_table(self, table):
         if table in self._json_config:
-            path = self._dataset_path + "-raw-tables" + "/" + table
-            pd_data = pd.read_parquet(path)
+            path = self._dataset_path + "/raw-tables/" + table 
+            pd_data = self._load_table_from_parquet(path)
+
+            print(f"Table {table} was loaded from cache")
             return pd_data
+        
+    def save_raw_table(self, table, pd_data):
+        path = self._dataset_path + "/raw-tables/*" + table
+        self._save_table_to_parquet(path, pd_data)
+        
+        print(f"Table {table} was saved into parquet cache")
+    
+    def save_table_for_analysis(self, table, pd_data):
+        path = self._dataset_path + "/analysis-tables/" + table
+        self._save_table_to_parquet(path, pd_data)
+        
+        print(f"Table {table} was saved into parquet cache")
+        
+    def load_table_for_analysis(self, table):
+        path = self._dataset_path + "/analysis-tables/" + table 
+        pd_data = self._load_table_from_parquet(path)
 
-        else:
-            ValueError
+        print(f"Table {table} was loaded from cache")
+        return pd_data
 
-    def load_and_print_tables_at_raw_data(self):
-         for table in self._json_config:
-             pd_data = self.load_raw_table_from_dataset(table)
-             print(table)
-             print(pd_data)
+    def _load_table_from_parquet(self, path):
+        pd_data = pd.read_parquet(path)
+        return pd_data
 
-    def _save_table_to_parquet(self, table, pd_data):
-            path = self._dataset_path + "-raw-tables" + "/" + table
-
+    def _save_table_to_parquet(self, path, pd_data):
             pd_data.to_parquet(path)
-
-            print(f"Table {table} was saved into parquet cache")
 
     def _strip_accents(self, text):
         return ''.join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
@@ -66,7 +81,7 @@ class Loader():
             return loaded_json
 
     def _load_yaml(self, path):
-        with open(path, "r") as yaml_file:
+        with open(path, "r", encoding='utf-8') as yaml_file:
             yaml_content = yaml.safe_load(yaml_file)
             return yaml_content
 
