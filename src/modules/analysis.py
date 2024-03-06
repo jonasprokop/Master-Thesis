@@ -12,7 +12,3 @@ class FeatureAnalysis():
         
         self._loader = loader    
         self._analysis = analysis_target
-    
-    def select_k_best(self):
-        print(x)
-            

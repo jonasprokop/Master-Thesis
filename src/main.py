@@ -20,7 +20,6 @@ if __name__ == "__main__":
 
     if remake_dataset:
         dataset = DatasetMaker(loader)
-        dataset.populate_model_with_data()
         dataset.create_test_dataset()
 
     if analyze_dataset:

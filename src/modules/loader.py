@@ -17,12 +17,14 @@ class Loader():
         transformation_data = os.environ.get("TRANSFORMATION_DATA")
         dataset_path = os.environ.get("DATASET_PATH")
         mapper = os.environ.get("MAPPER")
+        subjects_dataset = os.environ.get("SUBJECTS_DATASET")
 
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
         self._json_config = self._load_json(input_table_data)
         self._mapper = self._load_json(mapper)
         self._transformation_data = self._load_yaml(transformation_data)
+        self._subject_dataset = self._load_json(subjects_dataset)
 
 
     def load_and_save_dataset(self):
@@ -47,7 +49,7 @@ class Loader():
             return pd_data
         
     def save_raw_table(self, table, pd_data):
-        path = self._dataset_path + "/raw-tables/*" + table
+        path = self._dataset_path + "/raw-tables/*" + table 
         self._save_table_to_parquet(path, pd_data)
         
         print(f"Table {table} was saved into parquet cache")
