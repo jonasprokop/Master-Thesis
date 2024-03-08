@@ -1,6 +1,6 @@
 import sqlalchemy as sql
 import pandas as pd
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -77,6 +77,9 @@ class DatasetMaker():
 
                 print(f"Model was populated with table {table}")
 
+    def _reflect_object(self, table, pd_data):
+        db_object = Table(table, pd_data, autoload_with=self._sqlalchemy_engine)
+        self._base.metadata.tables[table] = db_object
 
     def _pivot_table(self, pd_data, id, values):
         pivot_df = pd_data.groupby(id).agg(values).reset_index()
