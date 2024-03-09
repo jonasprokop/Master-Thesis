@@ -81,9 +81,16 @@ class DatasetMaker():
         db_object = Table(table, pd_data, autoload_with=self._sqlalchemy_engine)
         self._base.metadata.tables[table] = db_object
 
-    def _pivot_table(self, pd_data, id, values):
-        pivot_df = pd_data.groupby(id).agg(values).reset_index()
-        return pivot_df
+    def _pivot_table(pd_data, index, columns, values):
+        df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc='first')
+        
+        df_pivot = df_pivot.reset_index()
+        
+        df_pivot.columns = [f'{col[1]}_{col[0]}' if isinstance(col, tuple) else col for col in df_pivot.columns]
+        
+        df_pivot.columns = [col[1:] if col.startswith('_') else col for col in df_pivot.columns]
+        
+        return df_pivot
 
     def _create_subjects_dataset(self, config):
         self._populate_model_with_data(config)
