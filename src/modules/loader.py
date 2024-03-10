@@ -21,14 +21,14 @@ class Loader():
 
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
-        self._json_config = self._load_json(input_table_data)
+        self._model_metadata = self._load_json(input_table_data)
         self._mapper = self._load_json(mapper)
         self._transformation_data = self._load_yaml(transformation_data)
-        self._subject_dataset = self._load_json(subjects_dataset)
+        self._subjects_dataset = self._load_json(subjects_dataset)
 
 
     def load_and_save_dataset(self):
-        for table in self._json_config:
+        for table in self._model_metadata:
             database_table_name = self._mapper[table]
             query = f"SELECT * FROM {database_table_name}"
 
@@ -41,7 +41,7 @@ class Loader():
             self.save_raw_table(self, table, pd_data)
 
     def load_raw_table(self, table):
-        if table in self._json_config:
+        if table in self._model_metadata:
             path = self._dataset_path + "/raw-tables/" + table 
             pd_data = self._load_table_from_parquet(path)
 

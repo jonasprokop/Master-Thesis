@@ -13,7 +13,7 @@ class DatasetMaker():
         self._sqlalchemy_engine = sql.create_engine("sqlite:///:memory:")
         self._base = declarative_base()
         self._models = {}
-        self._create_model_metadata()  
+        self._create_model_metadata(self._loader._model_metadata)  
         self._session_factory = sessionmaker(bind=self._sqlalchemy_engine)
         self._session = self._session_factory()
         self._base.metadata.bind = self._sqlalchemy_engine 
@@ -21,11 +21,11 @@ class DatasetMaker():
 
         
     def create_test_dataset(self):
-        self._create_subjects_dataset(self._loader._subject_dataset)
+        self._create_subjects_dataset(self._loader._subjects_dataset)
 
 
-    def _create_model_metadata(self):
-        for table_name, columns in self._loader._json_config.items():
+    def _create_model_metadata(self, config):
+        for table_name, columns in config.items():
             class_name = table_name.replace('.', '_')
             attrs = {'__tablename__': class_name} 
 
@@ -61,27 +61,21 @@ class DatasetMaker():
         self._base.metadata.create_all(self._sqlalchemy_engine)
 
 
-    def _populate_model_with_data(self, config):
-        for table in config:
-            if table not in self._tables_populated:
-                self._tables_populated.append(table)
-                pd_data = self._loader.load_raw_table(table)
-                model_class = self._models[table]
+    def _populate_model_with_data(self, table, pd_data):
+        if table not in self._tables_populated:
+            self._tables_populated.append(table)
+            model_class = self._models[table]
 
-                for index, row in pd_data.iterrows():
-                    if hasattr(model_class, 'generated_unique_row_id'):
-                        model_instance.generated_unique_row_id = index              
-                    model_instance = model_class(**row)
-                    self._session.add(model_instance)
-                    self._session.commit()
+            for index, row in pd_data.iterrows():        
+                model_instance = model_class(**row)
+                if hasattr(model_class, 'generated_unique_row_id'):
+                    model_instance.generated_unique_row_id = index      
+                self._session.add(model_instance)
+                self._session.commit()
 
-                print(f"Model was populated with table {table}")
+            print(f"Model was populated with table {table}")
 
-    def _reflect_object(self, table, pd_data):
-        db_object = Table(table, pd_data, autoload_with=self._sqlalchemy_engine)
-        self._base.metadata.tables[table] = db_object
-
-    def _pivot_table(pd_data, index, columns, values):
+    def _pivot_table(self, pd_data, index, columns, values):
         df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc='first')
         
         df_pivot = df_pivot.reset_index()
@@ -93,7 +87,16 @@ class DatasetMaker():
         return df_pivot
 
     def _create_subjects_dataset(self, config):
-        self._populate_model_with_data(config)
+        for table, addit_info in config.items():
+            pd_data = self._loader.load_raw_table(table)
+            pivot = addit_info["pivot"]
+            if pivot:
+                index = addit_info["index"]
+                columns = addit_info["columns"]
+                values = addit_info["values"]
+                pd_data = self._pivot_table(pd_data, index, columns, values)
+            
+            self._populate_model_with_data(table, pd_data)
         
 
         
