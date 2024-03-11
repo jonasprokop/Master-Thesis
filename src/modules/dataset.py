@@ -20,8 +20,8 @@ class DatasetMaker():
         self._tables_populated = []
 
         
-    def create_test_dataset(self):
-        self._create_subjects_dataset(self._loader._subjects_dataset)
+    def create_datasets(self):
+        self._create_subjects_dataset()
 
 
     def _create_model_metadata(self, config):
@@ -85,8 +85,8 @@ class DatasetMaker():
         df_pivot.columns = [col[1:] if col.startswith('_') else col for col in df_pivot.columns]
         
         return df_pivot
-
-    def _create_subjects_dataset(self, config):
+    
+    def _populate_dataset(self, config):
         for table, addit_info in config.items():
             pd_data = self._loader.load_raw_table(table)
             pivot = addit_info["pivot"]
@@ -97,6 +97,60 @@ class DatasetMaker():
                 pd_data = self._pivot_table(pd_data, index, columns, values)
             
             self._populate_model_with_data(table, pd_data)
-        
+
+    def _create_join_statement(self, config, key):
+        join_statement="Select "
+        index = 0
+        for table in config:
+            index += 1
+            table_data = self._loader._model_metadata[table]
+            columns = table_data.keys()
+            if index == 1:
+                join_statement = self._create_table_aliases(table, columns, join_statement)
+                join_statement += f"FROM {table} "
+                source_table = table
+            else:
+                join_statement += "JOIN "
+                join_statement = self._create_table_aliases(table, columns, join_statement)
+                join_statement += f"`{table}` ON `{source_table}`.`{key}` = `{table}`.`{key}` "
+
+
+        return join_statement
+    
+    def _create_table_aliases(self, table, columns, join_statement):
+        inner_index = 0
+        len_col = len(columns)
+        for column in columns:
+            inner_index += 1
+            column = self._loader._strip_accents(column)
+            if inner_index == len_col:
+                join_statement += f"`{table}`.`{column}` AS `{table}_{column}` "
+            else:
+                join_statement += f"`{table}`.`{column}` AS `{table}_{column}`, "
+        return join_statement
+
+
+    def _execute_statement_and_save_data(self, table_name, statement):
+        query = sql.text(statement)
+        with self._sqlalchemy_engine.begin() as session:
+            result = session.execute(query)  
+            pd_data = pd.DataFrame(result.fetchall(), columns=result.keys())
+            print(pd_data)
+            self._loader._save_table_to_parquet(table_name, pd_data)
+
+    def _create_subjects_dataset(self):
+        config = self._loader._subjects_dataset
+        table_name = "Subjects"
+        key = "Predmet_ID"
+
+        self._populate_dataset(config)
+
+        join_statement = self._create_join_statement(config, key)
+
+        self._execute_statement_and_save_data(table_name, join_statement)
+
+
+
+    
 
         

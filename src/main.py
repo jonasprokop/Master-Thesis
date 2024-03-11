@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     if remake_dataset:
         dataset = DatasetMaker(loader)
-        dataset.create_test_dataset()
+        dataset.create_datasets()
 
     if analyze_dataset:
         feature_analysis = FeatureAnalysis(loader, analysis_target)
