@@ -3,7 +3,8 @@
 .vscode/
 src/connections/__pycache__/
 src/modules/__pycache__/
-input_table_data.json
-transformation_data.yaml
+model_metada.json
 scheme_mapper.json
-subjects_dataset.json
+subjects_dataset_tables.json
+subjects_dataset_tables_wide.json
+subjects_dataset_operations.yaml

@@ -23,6 +23,9 @@ class DatasetMaker():
     def create_datasets(self):
         self._create_subjects_dataset()
 
+    def _create_subjects_dataset(self):
+        self._create_dataset(self._loader._subjects_dataset_tables, self._loader._subjects_dataset_operations)
+
 
     def _create_model_metadata(self, config):
         for table_name, columns in config.items():
@@ -75,8 +78,8 @@ class DatasetMaker():
 
             print(f"Model was populated with table {table}")
 
-    def _pivot_table(self, pd_data, index, columns, values):
-        df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc='first')
+    def _pivot_table(self, pd_data, index, columns, values, aggfunc):
+        df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
         
         df_pivot = df_pivot.reset_index()
         
@@ -85,20 +88,39 @@ class DatasetMaker():
         df_pivot.columns = [col[1:] if col.startswith('_') else col for col in df_pivot.columns]
         
         return df_pivot
+    def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
+        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
+
+
+        return pd_data
     
     def _populate_dataset(self, config):
         for table, addit_info in config.items():
             pd_data = self._loader.load_raw_table(table)
             pivot = addit_info["pivot"]
-            if pivot:
+            remap = addit_info["remap"]
+            if pivot and remap:
+                remap_column = addit_info["remap_column"]
+                remap_keys = addit_info["remap_keys"]
+                remap_table = addit_info["remap_table"]
                 index = addit_info["index"]
                 columns = addit_info["columns"]
                 values = addit_info["values"]
-                pd_data = self._pivot_table(pd_data, index, columns, values)
+                aggfunc = 'sum'
+                pd_data_mapper = self._loader.load_raw_table(remap_table)
+                pd_data = self._remap_column(pd_data, pd_data_mapper, remap_column, remap_keys)
+                pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
+
+            if pivot and not remap:
+                index = addit_info["index"]
+                columns = addit_info["columns"]
+                values = addit_info["values"]
+                aggfunc='first'
+                pd_data = self._pivot_table(pd_data, index, columns, aggfunc)
             
             self._populate_model_with_data(table, pd_data)
 
-    def _create_join_statement(self, config, key):
+    def _create_join_statement(self, config, key, where_statement):
         subquery = 1
         first_table  = ""         
         join_statement = f"SELECT * "
@@ -113,13 +135,15 @@ class DatasetMaker():
             elif index == 1:
                 join_statement = self._create_table_aliases(table, columns, join_statement, index)
                 join_statement += f"FROM {first_table} as {first_table} "
-                join_statement += f"JOIN {table} as {table} "
+                join_statement += f"LEFT JOIN {table} as {table} "
                 join_statement += f"""ON {first_table}."{key}" = {table}."{key}" """
+                if where_statement:
+                    join_statement += where_statement.format(first_table)
                 join_statement += f") AS subquery_1 "
                 subquery += 1
 
             else:
-                join_statement += f"JOIN ( SELECT "
+                join_statement += f"LEFT JOIN ( SELECT "
                 join_statement = self._create_table_aliases(table, columns, join_statement, index)
                 join_statement += f"FROM {table} as {table} "
                 join_statement += f") AS subquery_{subquery} "
@@ -138,27 +162,37 @@ class DatasetMaker():
                 join_statement += f"""{table}."{column}" AS "{table}_{column}" """
             else:
                 join_statement += f"""{table}."{column}" AS "{table}_{column}", """
+
         return join_statement
 
 
-    def _execute_statement_and_save_data(self, table_name, statement):
+    def _execute_statement(self, statement):
         query = sql.text(statement)
         with self._sqlalchemy_engine.begin() as session:
             result = session.execute(query)  
             pd_data = pd.DataFrame(result.fetchall(), columns=result.keys())
             print(pd_data)
-            self._loader._save_table_to_parquet(table_name, pd_data)
+        return pd_data
 
-    def _create_subjects_dataset(self):
-        config = self._loader._subjects_dataset
-        table_name = "Subjects"
-        key = "Predmet_ID"
+
+    def _create_dataset(self, config, operations):
+        table_name =  operations["table_name"] 
+        key = operations["key"] 
+        where_statement = operations["where_statement"] 
+        columns_select = operations["columns_select"] 
 
         self._populate_dataset(config)
 
-        join_statement = self._create_join_statement(config, key)
+        join_statement = self._create_join_statement(config, key, where_statement)
 
-        self._execute_statement_and_save_data(table_name, join_statement)
+        pd_data = self._execute_statement(join_statement)
+        
+        #if columns_select:
+            #pd_data = pd_data[[columns_select]]
+
+        self._loader.save_table_for_analysis(table_name, pd_data)
+
+        print(f"{table_name} was created and saved into parquet")
 
 
 
