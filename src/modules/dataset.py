@@ -99,34 +99,45 @@ class DatasetMaker():
             self._populate_model_with_data(table, pd_data)
 
     def _create_join_statement(self, config, key):
-        join_statement="Select "
-        index = 0
-        for table in config:
-            index += 1
+        subquery = 1
+        first_table  = ""         
+        join_statement = f"SELECT * "
+        for index, table in enumerate(config):
             table_data = self._loader._model_metadata[table]
             columns = table_data.keys()
-            if index == 1:
-                join_statement = self._create_table_aliases(table, columns, join_statement)
-                join_statement += f"FROM {table} "
-                source_table = table
-            else:
-                join_statement += "JOIN "
-                join_statement = self._create_table_aliases(table, columns, join_statement)
-                join_statement += f"`{table}` ON `{source_table}`.`{key}` = `{table}`.`{key}` "
+            if index == 0:
+                join_statement += f"FROM ( SELECT "
+                join_statement = self._create_table_aliases(table, columns, join_statement, index)
+                first_table = table
 
+            elif index == 1:
+                join_statement = self._create_table_aliases(table, columns, join_statement, index)
+                join_statement += f"FROM {first_table} as {first_table} "
+                join_statement += f"JOIN {table} as {table} "
+                join_statement += f"""ON {first_table}."{key}" = {table}."{key}" """
+                join_statement += f") AS subquery_1 "
+                subquery += 1
+
+            else:
+                join_statement += f"JOIN ( SELECT "
+                join_statement = self._create_table_aliases(table, columns, join_statement, index)
+                join_statement += f"FROM {table} as {table} "
+                join_statement += f") AS subquery_{subquery} "
+                join_statement += f"ON subquery_1.{first_table}_{key} = subquery_{subquery}.{table}_{key} "
+                subquery += 1
 
         return join_statement
     
-    def _create_table_aliases(self, table, columns, join_statement):
+    def _create_table_aliases(self, table, columns, join_statement, outer_index):
         inner_index = 0
         len_col = len(columns)
         for column in columns:
             inner_index += 1
             column = self._loader._strip_accents(column)
-            if inner_index == len_col:
-                join_statement += f"`{table}`.`{column}` AS `{table}_{column}` "
+            if inner_index == len_col and (outer_index % 2 != 0 or outer_index != 0):
+                join_statement += f"""{table}."{column}" AS "{table}_{column}" """
             else:
-                join_statement += f"`{table}`.`{column}` AS `{table}_{column}`, "
+                join_statement += f"""{table}."{column}" AS "{table}_{column}", """
         return join_statement
 
 
