@@ -79,60 +79,42 @@ class DatasetMaker():
 
             print(f"Model was populated with table {table}")
 
-    def _agg_pivot(self, pd_data, id, values):
-
-        values_list = {value: lambda x: json.dumps(list(x)) for value in values}
-
-        pivot_df = pd_data.groupby(id).agg(values_list).reset_index()
-
-        return pivot_df
-
-    def _pivot_table(self, pd_data, index, columns, values, aggfunc):
-        df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
-        
-        df_pivot = df_pivot.reset_index()
-        
-        df_pivot.columns = [f'{col[1]}_{col[0]}' if isinstance(col, tuple) else col for col in df_pivot.columns]
-        
-        df_pivot.columns = [col[1:] if col.startswith('_') else col for col in df_pivot.columns]
-        
-        return df_pivot
-    
-    def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
-        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
-        return pd_data
-    
     def _populate_dataset(self, config):
         for table, addit_info in config.items():
             pd_data = self._loader.load_raw_table(table)
             pivot = addit_info["pivot"]
             remap = addit_info["remap"]
             agg_pivot = addit_info["agg_pivot"]
+            split = addit_info["split"]
 
-            if pivot and remap:
+            if remap:
                 # pivot with dimensionality reduction based on join to other table
                 remap_column = addit_info["remap_column"]
                 remap_keys = addit_info["remap_keys"]
                 remap_table = addit_info["remap_table"]
-                index = addit_info["index"]
-                columns = addit_info["columns"]
-                values = addit_info["values"]
-                aggfunc = 'sum'
                 pd_data_mapper = self._loader.load_raw_table(remap_table)
                 pd_data = self._remap_column(pd_data, pd_data_mapper, remap_column, remap_keys)
-                pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
 
-            if pivot and not remap:
+            if split:
+                # splits column into 2 colums
+                split_column = addit_info["split_column"]
+                split_patterns = addit_info["split_patterns"]
+                pd_data = self._split_column(pd_data, split_column, split_patterns)
+
+            if pivot:
+                # simple pivot, used to create wide f_pred_prehled if needed
                 index = addit_info["index"]
                 columns = addit_info["columns"]
                 values = addit_info["values"]
-                aggfunc='first'
+                aggfunc='sum'
                 pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
 
             if agg_pivot:
+                # pivot by agregating the data into list
                 id = addit_info["id"]
                 agg_values = addit_info["agg_values"]
                 pd_data = self._agg_pivot(pd_data, id, agg_values)
+
 
             self._populate_model_with_data(table, pd_data)
 
@@ -180,11 +162,45 @@ class DatasetMaker():
                 join_statement += f"""{table}."{column}" AS "{table}_{column}", """
 
         return join_statement
+
+    def _agg_pivot(self, pd_data, id, values):
+
+        values_list = {value: lambda x: json.dumps(list(x)) for value in values}
+
+        pivot_df = pd_data.groupby(id).agg(values_list).reset_index()
+
+        return pivot_df
+
+    def _pivot_table(self, pd_data, index, columns, values, aggfunc):
+        df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
+        
+        df_pivot = df_pivot.reset_index()
+        
+        df_pivot.columns = [f'{col[1]}_{col[0]}' if isinstance(col, tuple) else col for col in df_pivot.columns]
+        
+        df_pivot.columns = [col[1:] if col.startswith('_') else col for col in df_pivot.columns]
+        
+        return df_pivot
+    
+    def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
+
+        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
+
+        return pd_data
+    
+    
     
     def _split_column(self, pd_data, split_column, split_patterns):
-        for column, pattern in split_patterns.items():
-            pd_data[[column, split_column]] = pd_data[split_column].str.split(pattern, 1, expand=True)
-            return pd_data
+        for pattern, column in split_patterns.items():
+            split_values = pd_data[split_column].str.split(pattern, expand=True)
+            pd_data[column] = split_values[0]  
+            try:
+                pd_data[split_column] = split_values[1] 
+            except:
+                print(split_values[0])
+            
+        return pd_data
+    
 
     def _execute_statement(self, statement):
         query = sql.text(statement)
