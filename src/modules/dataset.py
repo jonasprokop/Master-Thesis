@@ -1,5 +1,6 @@
 import sqlalchemy as sql
 import pandas as pd
+import json
 from sqlalchemy import Column, Integer, String, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -78,6 +79,14 @@ class DatasetMaker():
 
             print(f"Model was populated with table {table}")
 
+    def _agg_pivot(self, pd_data, id, values):
+
+        values_list = {value: lambda x: json.dumps(list(x)) for value in values}
+
+        pivot_df = pd_data.groupby(id).agg(values_list).reset_index()
+
+        return pivot_df
+
     def _pivot_table(self, pd_data, index, columns, values, aggfunc):
         df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
         
@@ -88,10 +97,9 @@ class DatasetMaker():
         df_pivot.columns = [col[1:] if col.startswith('_') else col for col in df_pivot.columns]
         
         return df_pivot
+    
     def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
         pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
-
-
         return pd_data
     
     def _populate_dataset(self, config):
@@ -99,7 +107,10 @@ class DatasetMaker():
             pd_data = self._loader.load_raw_table(table)
             pivot = addit_info["pivot"]
             remap = addit_info["remap"]
+            agg_pivot = addit_info["agg_pivot"]
+
             if pivot and remap:
+                # pivot with dimensionality reduction based on join to other table
                 remap_column = addit_info["remap_column"]
                 remap_keys = addit_info["remap_keys"]
                 remap_table = addit_info["remap_table"]
@@ -116,8 +127,13 @@ class DatasetMaker():
                 columns = addit_info["columns"]
                 values = addit_info["values"]
                 aggfunc='first'
-                pd_data = self._pivot_table(pd_data, index, columns, aggfunc)
-            
+                pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
+
+            if agg_pivot:
+                id = addit_info["id"]
+                agg_values = addit_info["agg_values"]
+                pd_data = self._agg_pivot(pd_data, id, agg_values)
+
             self._populate_model_with_data(table, pd_data)
 
     def _create_join_statement(self, config, key, where_statement):
@@ -164,7 +180,11 @@ class DatasetMaker():
                 join_statement += f"""{table}."{column}" AS "{table}_{column}", """
 
         return join_statement
-
+    
+    def _split_column(self, pd_data, split_column, split_patterns):
+        for column, pattern in split_patterns.items():
+            pd_data[[column, split_column]] = pd_data[split_column].str.split(pattern, 1, expand=True)
+            return pd_data
 
     def _execute_statement(self, statement):
         query = sql.text(statement)
