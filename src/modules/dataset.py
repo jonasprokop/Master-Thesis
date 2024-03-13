@@ -79,21 +79,32 @@ class DatasetMaker():
 
             print(f"Model was populated with table {table}")
 
-    def _populate_dataset(self, config):
+    def _preprocess_and_populate_model(self, config):
         for table, addit_info in config.items():
             pd_data = self._loader.load_raw_table(table)
             pivot = addit_info["pivot"]
             remap = addit_info["remap"]
-            agg_pivot = addit_info["agg_pivot"]
+            agg = addit_info["agg"]
             split = addit_info["split"]
+            bool_map_pivot = addit_info["bool_map_pivot"]
+            average = addit_info["average"]
+            if average:
+                column_name_average = addit_info["column_name_average"]
+                columns_to_average = addit_info["columns_to_average"]
+                pd_data = self._sum_columns_into_average(self, pd_data, column_name_average, columns_to_average)
 
             if remap:
                 # pivot with dimensionality reduction based on join to other table
-                remap_column = addit_info["remap_column"]
+                remap_columns = addit_info["remap_columns"]
+                remap_tables = addit_info["remap_tables"]
                 remap_keys = addit_info["remap_keys"]
-                remap_table = addit_info["remap_table"]
-                pd_data_mapper = self._loader.load_raw_table(remap_table)
-                pd_data = self._remap_column(pd_data, pd_data_mapper, remap_column, remap_keys)
+
+                for column in remap_columns:
+                    remap_table = remap_tables[column]
+                    remap_key = remap_keys[column]
+                    pd_data_mapper = self._loader.load_raw_table(remap_table)
+                    pd_data = self._remap_column(pd_data, pd_data_mapper, column, remap_key)
+
 
             if split:
                 # splits column into 2 colums
@@ -101,23 +112,88 @@ class DatasetMaker():
                 split_patterns = addit_info["split_patterns"]
                 pd_data = self._split_column(pd_data, split_column, split_patterns)
 
+            if agg:
+                # aggregation function multiple rows aggregate data into one row single column
+                id = addit_info["agg_index"]
+                agg_values = addit_info["agg_columns"]
+                pd_data = self._agg_pivot(pd_data, id, agg_values)
+
             if pivot:
-                # simple pivot, used to create wide f_pred_prehled if needed
-                index = addit_info["index"]
-                columns = addit_info["columns"]
-                values = addit_info["values"]
+                # sum pivot function
+                index = addit_info["pivot_index"]
+                columns = addit_info["pivot_columns"]
+                values = addit_info["pivot_values"]
                 aggfunc='sum'
                 pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
 
-            if agg_pivot:
-                # pivot by agregating the data into list
-                id = addit_info["id"]
-                agg_values = addit_info["agg_values"]
-                pd_data = self._agg_pivot(pd_data, id, agg_values)
+            if bool_map_pivot:
+                # bool pivot function
+                index = addit_info["bool_map_pivot_index"]
+                columns = addit_info["bool_map_pivot_columns"]
+                pd_data = self._bool_map_pivot_table(pd_data, index, columns)
 
 
+            print(len (pd_data), pd_data['Predmet_ID'].nunique())
+            self._loader.save_table_for_analysis(table, pd_data)
             self._populate_model_with_data(table, pd_data)
 
+    def _agg_pivot(self, pd_data, id, values):
+
+        values_list = {value: 'sum' for value in values}
+        pd_data = pd_data.groupby(id).agg(values_list).reset_index()
+
+        return pd_data
+    
+
+
+    def _pivot_table(self, pd_data, index, columns, values, aggfunc):
+
+        pd_data = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc, fill_value=0)
+        pd_data = pd_data.reset_index()
+        
+        pd_data.columns = [f'{col[1]}_{col[0]}' if isinstance(col, tuple) else col for col in pd_data.columns]
+        pd_data.columns = [col.strip('_') for col in pd_data.columns]
+        pd_data.columns = [self._loader._strip_accents(column) for column in pd_data.columns]
+        
+        return pd_data
+    
+    def _bool_map_pivot_table(self, pd_data, index, columns):
+        agg_func = 'first'
+
+        one_hot = pd.get_dummies(pd_data[columns], prefix=columns) 
+        pd_data = pd.concat([pd_data, one_hot], axis=1)
+
+        pd_data = pd_data.groupby(index).agg(agg_func)
+        pd_data.drop(columns=[columns], inplace=True)
+
+        pd_data.reset_index(inplace=True)
+
+        return pd_data
+        
+    def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
+
+        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
+
+        return pd_data
+    
+    
+    def _split_column(self, pd_data, split_column, split_patterns):
+        for pattern, column in split_patterns.items():
+            split_values = pd_data[split_column].str.split(pattern, expand=True)
+            pd_data[column] = split_values[0]  
+            try:
+                pd_data[split_column] = split_values[1] 
+            except:
+                print(split_values[0])
+            
+        return pd_data
+    
+    def _sum_columns_into_average(self, pd_data, column_name, columns_to_average):
+
+        pd_data[column_name] = pd_data[columns_to_average].mean(axis=1)
+
+        return pd_data
+    
     def _create_join_statement(self, config, key, where_statement):
         subquery = 1
         first_table  = ""         
@@ -133,7 +209,7 @@ class DatasetMaker():
             elif index == 1:
                 join_statement = self._create_table_aliases(table, columns, join_statement, index)
                 join_statement += f"FROM {first_table} as {first_table} "
-                join_statement += f"LEFT JOIN {table} as {table} "
+                join_statement += f"JOIN {table} as {table} "
                 join_statement += f"""ON {first_table}."{key}" = {table}."{key}" """
                 if where_statement:
                     join_statement += where_statement.format(first_table)
@@ -162,44 +238,6 @@ class DatasetMaker():
                 join_statement += f"""{table}."{column}" AS "{table}_{column}", """
 
         return join_statement
-
-    def _agg_pivot(self, pd_data, id, values):
-
-        values_list = {value: lambda x: json.dumps(list(x)) for value in values}
-
-        pivot_df = pd_data.groupby(id).agg(values_list).reset_index()
-
-        return pivot_df
-
-    def _pivot_table(self, pd_data, index, columns, values, aggfunc):
-        df_pivot = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
-        
-        df_pivot = df_pivot.reset_index()
-        
-        df_pivot.columns = [f'{col[1]}_{col[0]}' if isinstance(col, tuple) else col for col in df_pivot.columns]
-        
-        df_pivot.columns = [col[1:] if col.startswith('_') else col for col in df_pivot.columns]
-        
-        return df_pivot
-    
-    def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
-
-        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
-
-        return pd_data
-    
-    
-    
-    def _split_column(self, pd_data, split_column, split_patterns):
-        for pattern, column in split_patterns.items():
-            split_values = pd_data[split_column].str.split(pattern, expand=True)
-            pd_data[column] = split_values[0]  
-            try:
-                pd_data[split_column] = split_values[1] 
-            except:
-                print(split_values[0])
-            
-        return pd_data
     
 
     def _execute_statement(self, statement):
@@ -209,6 +247,17 @@ class DatasetMaker():
             pd_data = pd.DataFrame(result.fetchall(), columns=result.keys())
             print(pd_data)
         return pd_data
+    
+    def _deserialize_json_columns(self, pd_data):
+        for column in pd_data.columns:
+            pd_data[column] = pd_data[column].apply(self._parse_json_string)
+        return pd_data
+    
+    def _parse_json_string(self, string):
+        try:
+            return json.loads(string)
+        except (json.JSONDecodeError, TypeError):
+            return string  
 
 
     def _create_dataset(self, config, operations):
@@ -217,11 +266,13 @@ class DatasetMaker():
         where_statement = operations["where_statement"] 
         columns_select = operations["columns_select"] 
 
-        self._populate_dataset(config)
+        self._preprocess_and_populate_model(config)
 
         join_statement = self._create_join_statement(config, key, where_statement)
 
         pd_data = self._execute_statement(join_statement)
+
+        pd_data = self._deserialize_json_columns(pd_data)
         
         #if columns_select:
             #pd_data = pd_data[[columns_select]]
