@@ -18,6 +18,7 @@ class Loader():
         mapper = os.environ.get("MAPPER")
         subjects_dataset_tables = os.environ.get("SUBJECTS_DATASET_TABLES")
         subjects_dataset_operations = os.environ.get("SUBJECTS_DATASET_OPERATIONS")
+        excel_data = os.environ.get("EXCEL_DATA")
 
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
@@ -25,6 +26,7 @@ class Loader():
         self._mapper = self._load_json(mapper)
         self._subjects_dataset_tables = self._load_json(subjects_dataset_tables)
         self._subjects_dataset_operations = self._load_yaml(subjects_dataset_operations)
+        self._excel_data = excel_data
 
 
     def load_and_save_dataset(self):
@@ -88,6 +90,9 @@ class Loader():
             return yaml_content
 
 
+    def _load_excel(self, path, sheet_name):
+        pd_data = pd.read_excel(path, sheet_name=sheet_name)
+        return pd_data
 
     
         
