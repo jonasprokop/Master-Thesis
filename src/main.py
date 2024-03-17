@@ -5,8 +5,8 @@ from modules.analysis import FeatureAnalysis
 from modules.dataset import DatasetMaker
 
 
-reload_dataset = False
-remake_dataset = True
+reload_dataset = True
+remake_dataset = False
 analyze_dataset = False
 save_analysis = False
 analysis_target = ""
