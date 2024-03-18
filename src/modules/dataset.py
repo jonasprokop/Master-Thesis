@@ -81,13 +81,23 @@ class DatasetMaker():
 
     def _preprocess_and_populate_model(self, config):
         for table, addit_info in config.items():
+
             pd_data = self._loader.load_raw_table(table)
+            
             pivot = addit_info["pivot"]
             remap = addit_info["remap"]
             agg = addit_info["agg"]
             split = addit_info["split"]
             bool_map_pivot = addit_info["bool_map_pivot"]
             average = addit_info["average"]
+            recode_subject_intervals = addit_info["recode_subject_intervals"]
+
+            if recode_subject_intervals:
+                day_column = addit_info["day_column"]
+                start_column = addit_info["start_column"]
+                end_column = addit_info["end_column"]
+                pd_data = self._recode_subject_time_intervals(pd_data, day_column, start_column, end_column)
+
             if average:
                 column_name_average = addit_info["column_name_average"]
                 columns_to_average = addit_info["columns_to_average"]
@@ -194,6 +204,58 @@ class DatasetMaker():
 
         return pd_data
     
+    def _encode_day(self, day_str):
+        days = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
+        try:
+            return days.index(day_str.split()[0]) + 1
+        except:
+            return None
+    
+    def _enconde_daytime_interval(self, start_time, end_time):
+        intervals = {
+        1: ("06:00", "9:00"),
+        2: ("9:00", "13:00"),
+        3: ("13:00", "16:00"),
+        4: ("16:00", "19:00"),
+        5: ("19:00", "23:59")
+        }
+        #tady by to chtělo projet normální rozdělení intervalů
+        for interval, (start, end) in intervals.items():
+            try:
+                if pd.to_datetime(start_time).time() <= pd.to_datetime(start).time() and pd.to_datetime(end_time).time() <= pd.to_datetime(end).time():
+                    return interval
+            except:
+                return None
+            
+    def _generate_combination_dict(self):
+        combination_dict = {}
+        for day in range(1, 8):
+            for interval in range(1, 6):
+                combination_dict[(day, interval)] = (day - 1) * 5 + interval
+        return combination_dict
+    
+    def _assign_schedulge_key(self, combination_dict, day, interval):
+        try:
+            key = combination_dict[(day, interval)]
+            return key
+        except:
+            return None
+        
+    def _recode_subject_time_intervals(self, pd_data, day_column, start_column, end_column):
+
+        day_column_encoded = day_column + "_encoded"
+        interval_column = "interval_column"
+        schedulge_code = "schedulge_code"
+
+        pd_data[day_column_encoded] = pd_data[day_column].apply(self._encode_day)
+        pd_data[interval_column] = pd_data.apply(lambda x: self._enconde_daytime_interval(x[start_column], x[end_column]), axis=1)
+        combination_dict = self._generate_combination_dict()
+        pd_data[schedulge_code] = pd_data.apply(lambda x: self._assign_schedulge_key(combination_dict, x[day_column_encoded], x[interval_column]), axis=1)
+
+        pd_data.drop([start_column, end_column, interval_column, day_column_encoded])
+
+        return pd_data
+
     def _create_join_statement(self, config, key, where_statement):
         subquery = 1
         first_table  = ""         

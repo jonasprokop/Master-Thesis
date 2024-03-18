@@ -48,7 +48,7 @@ class Loader():
 
             pd_data.columns = [self._strip_accents(column) for column in pd_data.columns]
 
-            self._save_raw_table(self, table, pd_data)
+            self._save_raw_table(table, pd_data)
 
     def _save_tables_from_excel(self, excel_config):
          for table, table_data in excel_config.items():
@@ -119,7 +119,7 @@ class Loader():
             return yaml_content
 
     def _load_excel(self, path, sheet_name, skiprows):
-        pd_data = pd.read_excel(path, sheet_name=sheet_name, header=1, skiprows=skiprows)
+        pd_data = pd.read_excel(path, sheet_name=sheet_name, header=0, skiprows=skiprows)
         print(f"I have succesfully loaded {path}")
         return pd_data
 
