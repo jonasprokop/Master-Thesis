@@ -23,6 +23,10 @@ class Loader():
         subjects_dataset_tables = os.environ.get("SUBJECTS_DATASET_TABLES")
         subjects_dataset_operations = os.environ.get("SUBJECTS_DATASET_OPERATIONS")
         excel_data = os.environ.get("EXCEL_DATA")
+        classes_dataset_tables = os.environ.get("CLASSES_DATASET_TABLES")
+        classes_dataset_operations = os.environ.get("CLASSES_DATASET_OPERATIONS")
+        registration_dataset_tables = os.environ.get("REGISTRATION_DATASET_TABLES")
+        registration_dataset_operations = os.environ.get("REGISTRATION_DATASET_OPERATIONS")
 
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
@@ -31,10 +35,14 @@ class Loader():
         self._subjects_dataset_tables = self._load_json(subjects_dataset_tables)
         self._subjects_dataset_operations = self._load_yaml(subjects_dataset_operations)
         self._excel_data = self._load_json(excel_data)
+        self._classes_dataset_tables = self._load_json(classes_dataset_tables)
+        self._classes_dataset_operations = self._load_yaml(classes_dataset_operations)
+        self._registration_dataset_tables = self._load_json(registration_dataset_tables)
+        self._registration_dataset_operations = self._load_yaml(registration_dataset_operations)
 
 
     def load_and_save_dataset(self):
-        self. _save_tables_from_db(self._mapper)
+        self._save_tables_from_db(self._mapper)
         self._save_tables_from_excel(self._excel_data)
 
     
@@ -70,12 +78,11 @@ class Loader():
                 self._save_raw_table(table, pd_data)
 
     def load_raw_table(self, table):
-        if table in self._model_metadata:
-            path = self._dataset_path + "/raw-tables/" + table 
-            pd_data = self._load_table_from_parquet(path)
+        path = self._dataset_path + "/raw-tables/" + table 
+        pd_data = self._load_table_from_parquet(path)
 
-            print(f"Table {table} was loaded from cache")
-            return pd_data
+        print(f"Table {table} was loaded from cache")
+        return pd_data
     
     def save_table_for_analysis(self, table, pd_data):
         path = self._dataset_path + "/analysis-tables/" + table

@@ -9,3 +9,8 @@ subjects_dataset_tables.json
 subjects_dataset_tables_wide.json
 subjects_dataset_operations.yaml
 list_of_excel_files.json
+classes_dataset_tables.json
+classes_dataset_operations.yaml
+registration_dataset_tables.json
+registration_dataset_operations.yaml
+

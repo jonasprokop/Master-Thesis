@@ -22,11 +22,79 @@ class DatasetMaker():
 
         
     def create_datasets(self):
-        self._create_subjects_dataset()
+        #self._create_subjects_dataset()
+        self._create_classes_dataset()
+        self._create_registrations_dataset()
 
     def _create_subjects_dataset(self):
-        self._create_dataset(self._loader._subjects_dataset_tables, self._loader._subjects_dataset_operations)
+        config = self._loader._subjects_dataset_tables
+        operations =  self._loader._subjects_dataset_operations
+        table_name =  operations["table_name"] 
+        key = operations["key"] 
+        where_statement = operations["where_statement"] 
+        columns_select = operations["columns_select"] 
 
+        for table, addit_info in config.items():
+
+            pd_data = self._loader.load_raw_table(table)
+
+            pd_data = self._preprocess_data(pd_data, table, addit_info)
+
+            self._populate_table_with_data(table, pd_data)
+
+            join_statement = self._create_join_statement(config, key, where_statement)
+
+            pd_data = self._execute_statement(join_statement)
+
+            pd_data = self._deserialize_json_columns(pd_data)
+            
+        #if columns_select:
+            #pd_data = pd_data[[columns_select]]
+
+        self._loader.save_table_for_analysis(table_name, pd_data)
+
+        print(f"{table_name} was created and saved into parquet")
+
+    def _create_classes_dataset(self):
+
+        config = self._loader._classes_dataset_tables
+        operations =  self._loader._classes_dataset_operations
+        table_name =  operations["table_name"] 
+        columns_select = operations["columns_select"] 
+
+        for table, addit_info in config.items():
+
+            pd_data = self._loader.load_raw_table(table)
+            pd_data = self._preprocess_data(pd_data, table, addit_info)
+
+            #if columns_select:
+            #   pd_data = pd_data[[columns_select]]
+
+            self._loader.save_table_for_analysis(table_name, pd_data)
+
+        print(f"{table_name} was created and saved into parquet")
+
+    def _create_registrations_dataset(self):
+
+        config = self._loader._registration_dataset_tables
+        operations =  self._loader._registration_dataset_operations
+        table_name =  operations["table_name"] 
+        columns_select = operations["columns_select"] 
+
+        
+        for table, addit_info in config.items():
+
+            pd_data = self._loader.load_raw_table(table)
+
+
+            pd_data = self._preprocess_data(pd_data, table, addit_info)
+
+            #if columns_select:
+            #   pd_data = pd_data[[columns_select]]
+
+            self._loader.save_table_for_analysis(table_name, pd_data)
+
+        print(f"{table_name} was created and saved into parquet")
 
     def _create_model_metadata(self, config):
         for table_name, columns in config.items():
@@ -65,7 +133,7 @@ class DatasetMaker():
         self._base.metadata.create_all(self._sqlalchemy_engine)
 
 
-    def _populate_model_with_data(self, table, pd_data):
+    def _populate_table_with_data(self, table, pd_data):
         if table not in self._tables_populated:
             self._tables_populated.append(table)
             model_class = self._models[table]
@@ -79,63 +147,61 @@ class DatasetMaker():
 
             print(f"Model was populated with table {table}")
 
-    def _preprocess_and_populate_model(self, config):
-        for table, addit_info in config.items():
-            pd_data = self._loader.load_raw_table(table)
-            pivot = addit_info["pivot"]
-            remap = addit_info["remap"]
-            agg = addit_info["agg"]
-            split = addit_info["split"]
-            bool_map_pivot = addit_info["bool_map_pivot"]
-            average = addit_info["average"]
-            if average:
-                column_name_average = addit_info["column_name_average"]
-                columns_to_average = addit_info["columns_to_average"]
-                pd_data = self._sum_columns_into_average(self, pd_data, column_name_average, columns_to_average)
-
-            if remap:
-                # pivot with dimensionality reduction based on join to other table
-                remap_columns = addit_info["remap_columns"]
-                remap_tables = addit_info["remap_tables"]
-                remap_keys = addit_info["remap_keys"]
-
-                for column in remap_columns:
-                    remap_table = remap_tables[column]
-                    remap_key = remap_keys[column]
-                    pd_data_mapper = self._loader.load_raw_table(remap_table)
-                    pd_data = self._remap_column(pd_data, pd_data_mapper, column, remap_key)
+    def _preprocess_data(self, pd_data, table, addit_info):
+        pivot = addit_info["pivot"]
+        remap = addit_info["remap"]
+        agg = addit_info["agg"]
+        split = addit_info["split"]
+        bool_map_pivot = addit_info["bool_map_pivot"]
+        average = addit_info["average"]
 
 
-            if split:
-                # splits column into 2 colums
-                split_column = addit_info["split_column"]
-                split_patterns = addit_info["split_patterns"]
-                pd_data = self._split_column(pd_data, split_column, split_patterns)
+        if average:
+            column_name_average = addit_info["column_name_average"]
+            columns_to_average = addit_info["columns_to_average"]
+            pd_data = self._sum_columns_into_average(self, pd_data, column_name_average, columns_to_average)
 
-            if agg:
-                # aggregation function multiple rows aggregate data into one row single column
-                id = addit_info["agg_index"]
-                agg_values = addit_info["agg_columns"]
-                pd_data = self._agg_pivot(pd_data, id, agg_values)
+        if remap:
+            # pivot with dimensionality reduction based on join to other table
+            remap_columns = addit_info["remap_columns"]
+            remap_tables = addit_info["remap_tables"]
+            remap_keys = addit_info["remap_keys"]
 
-            if pivot:
-                # sum pivot function
-                index = addit_info["pivot_index"]
-                columns = addit_info["pivot_columns"]
-                values = addit_info["pivot_values"]
-                aggfunc='sum'
-                pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
-
-            if bool_map_pivot:
-                # bool pivot function
-                index = addit_info["bool_map_pivot_index"]
-                columns = addit_info["bool_map_pivot_columns"]
-                pd_data = self._bool_map_pivot_table(pd_data, index, columns)
+            for column in remap_columns:
+                remap_table = remap_tables[column]
+                remap_key = remap_keys[column]
+                pd_data_mapper = self._loader.load_raw_table(remap_table)
+                pd_data = self._remap_column(pd_data, pd_data_mapper, column, remap_key)
 
 
-            print(len (pd_data), pd_data['Predmet_ID'].nunique())
-            self._loader.save_table_for_analysis(table, pd_data)
-            self._populate_model_with_data(table, pd_data)
+        if split:
+            # splits column into 2 colums
+            split_column = addit_info["split_column"]
+            split_patterns = addit_info["split_patterns"]
+            pd_data = self._split_column(pd_data, split_column, split_patterns)
+
+        if agg:
+            # aggregation function multiple rows aggregate data into one row single column
+            id = addit_info["agg_index"]
+            agg_values = addit_info["agg_columns"]
+            pd_data = self._agg_pivot(pd_data, id, agg_values)
+
+        if pivot:
+            # sum pivot function
+            index = addit_info["pivot_index"]
+            columns = addit_info["pivot_columns"]
+            values = addit_info["pivot_values"]
+            aggfunc='sum'
+            pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
+
+        if bool_map_pivot:
+            # bool pivot function
+            index = addit_info["bool_map_pivot_index"]
+            columns = addit_info["bool_map_pivot_columns"]
+            pd_data = self._bool_map_pivot_table(pd_data, index, columns)
+
+        return pd_data
+        
 
     def _agg_pivot(self, pd_data, id, values):
 
@@ -260,26 +326,7 @@ class DatasetMaker():
             return string  
 
 
-    def _create_dataset(self, config, operations):
-        table_name =  operations["table_name"] 
-        key = operations["key"] 
-        where_statement = operations["where_statement"] 
-        columns_select = operations["columns_select"] 
 
-        self._preprocess_and_populate_model(config)
-
-        join_statement = self._create_join_statement(config, key, where_statement)
-
-        pd_data = self._execute_statement(join_statement)
-
-        pd_data = self._deserialize_json_columns(pd_data)
-        
-        #if columns_select:
-            #pd_data = pd_data[[columns_select]]
-
-        self._loader.save_table_for_analysis(table_name, pd_data)
-
-        print(f"{table_name} was created and saved into parquet")
 
 
 
