@@ -1,6 +1,7 @@
 import sqlalchemy as sql
 import pandas as pd
 import json
+import re
 from sqlalchemy import Column, Integer, String, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -85,8 +86,7 @@ class DatasetMaker():
         for table, addit_info in config.items():
 
             pd_data = self._loader.load_raw_table(table)
-
-
+            
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
             #if columns_select:
@@ -95,6 +95,81 @@ class DatasetMaker():
             self._loader.save_table_for_analysis(table_name, pd_data)
 
         print(f"{table_name} was created and saved into parquet")
+
+    def _preprocess_data(self, pd_data, table, addit_info):
+        pivot = addit_info["pivot"]
+        remap = addit_info["remap"]
+        agg = addit_info["agg"]
+        split = addit_info["split"]
+        bool_map_pivot = addit_info["bool_map_pivot"]
+        average = addit_info["average"]
+
+        recode_categorical_variables = addit_info["recode_categorical_variables"]
+        recode_day_column = addit_info["recode_day_column"]
+        recode_time_column = addit_info["recode_time_column"]
+        
+
+        if average:
+            column_name_average = addit_info["column_name_average"]
+            columns_to_average = addit_info["columns_to_average"]
+            pd_data = self._sum_columns_into_average(self, pd_data, column_name_average, columns_to_average)
+
+        if remap:
+            # pivot with dimensionality reduction based on join to other table
+            remap_columns = addit_info["remap_columns"]
+            remap_tables = addit_info["remap_tables"]
+            remap_keys = addit_info["remap_keys"]
+
+            for column in remap_columns:
+                remap_table = remap_tables[column]
+                remap_key = remap_keys[column]
+                pd_data_mapper = self._loader.load_raw_table(remap_table)
+                pd_data = self._remap_column(pd_data, pd_data_mapper, column, remap_key)
+
+
+        if split:
+            # splits column into 2 colums
+            split_column = addit_info["split_column"]
+            split_patterns = addit_info["split_patterns"]
+            pd_data = self._split_column(pd_data, split_column, split_patterns)
+
+        if agg:
+            # aggregation function multiple rows aggregate data into one row single column
+            id = addit_info["agg_index"]
+            agg_values = addit_info["agg_columns"]
+            pd_data = self._agg_pivot(pd_data, id, agg_values)
+
+        if pivot:
+            # sum pivot function
+            index = addit_info["pivot_index"]
+            columns = addit_info["pivot_columns"]
+            values = addit_info["pivot_values"]
+            aggfunc='sum'
+            pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
+
+        if bool_map_pivot:
+            # bool pivot function
+            index = addit_info["bool_map_pivot_index"]
+            columns = addit_info["bool_map_pivot_columns"]
+            pd_data = self._bool_map_pivot_table(pd_data, index, columns)
+
+        if recode_categorical_variables:
+            categorical_columns = addit_info["categorical_columns"]
+            recoding_dicts = addit_info["recoding_dicts"]
+            pd_data = self._recode_categorical_columns(pd_data, categorical_columns, recoding_dicts)
+
+        if recode_day_column:
+            day_column = addit_info["day_column"]
+            pd_data = self._recode_day_column(pd_data, day_column)
+
+        if recode_time_column:
+            split = addit_info["split"]
+            time_column_start = addit_info["time_column_start"]
+            time_column_end = addit_info["time_column_end"]
+
+            pd_data = self._recode_time_columns(split, pd_data, time_column_start, time_column_end)
+
+        return pd_data
 
     def _create_model_metadata(self, config):
         for table_name, columns in config.items():
@@ -146,62 +221,7 @@ class DatasetMaker():
                 self._session.commit()
 
             print(f"Model was populated with table {table}")
-
-    def _preprocess_data(self, pd_data, table, addit_info):
-        pivot = addit_info["pivot"]
-        remap = addit_info["remap"]
-        agg = addit_info["agg"]
-        split = addit_info["split"]
-        bool_map_pivot = addit_info["bool_map_pivot"]
-        average = addit_info["average"]
-
-
-        if average:
-            column_name_average = addit_info["column_name_average"]
-            columns_to_average = addit_info["columns_to_average"]
-            pd_data = self._sum_columns_into_average(self, pd_data, column_name_average, columns_to_average)
-
-        if remap:
-            # pivot with dimensionality reduction based on join to other table
-            remap_columns = addit_info["remap_columns"]
-            remap_tables = addit_info["remap_tables"]
-            remap_keys = addit_info["remap_keys"]
-
-            for column in remap_columns:
-                remap_table = remap_tables[column]
-                remap_key = remap_keys[column]
-                pd_data_mapper = self._loader.load_raw_table(remap_table)
-                pd_data = self._remap_column(pd_data, pd_data_mapper, column, remap_key)
-
-
-        if split:
-            # splits column into 2 colums
-            split_column = addit_info["split_column"]
-            split_patterns = addit_info["split_patterns"]
-            pd_data = self._split_column(pd_data, split_column, split_patterns)
-
-        if agg:
-            # aggregation function multiple rows aggregate data into one row single column
-            id = addit_info["agg_index"]
-            agg_values = addit_info["agg_columns"]
-            pd_data = self._agg_pivot(pd_data, id, agg_values)
-
-        if pivot:
-            # sum pivot function
-            index = addit_info["pivot_index"]
-            columns = addit_info["pivot_columns"]
-            values = addit_info["pivot_values"]
-            aggfunc='sum'
-            pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
-
-        if bool_map_pivot:
-            # bool pivot function
-            index = addit_info["bool_map_pivot_index"]
-            columns = addit_info["bool_map_pivot_columns"]
-            pd_data = self._bool_map_pivot_table(pd_data, index, columns)
-
-        return pd_data
-        
+    
 
     def _agg_pivot(self, pd_data, id, values):
 
@@ -260,57 +280,73 @@ class DatasetMaker():
 
         return pd_data
     
+    
+    def _recode_categorical_columns(self, pd_data, columns, recoding_dicts):
+        for column in columns:
+            recoding_dict = recoding_dicts[column]
+            pd_data[column] = pd_data[column].map(recoding_dict)
+        return pd_data
+    
     def _encode_day(self, day_str):
-        days = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
-        try:
-            return days.index(day_str.split()[0]) + 1
-        except:
-            return None
-    
-    def _enconde_daytime_interval(self, start_time, end_time):
-        intervals = {
-        1: ("06:00", "9:00"),
-        2: ("9:00", "13:00"),
-        3: ("13:00", "16:00"),
-        4: ("16:00", "19:00"),
-        5: ("19:00", "23:59")
-        }
-        #tady by to chtělo projet normální rozdělení intervalů
-        for interval, (start, end) in intervals.items():
-            try:
-                if pd.to_datetime(start_time).time() <= pd.to_datetime(start).time() and pd.to_datetime(end_time).time() <= pd.to_datetime(end).time():
-                    return interval
-            except:
-                return None
-            
-    def _generate_combination_dict(self):
-        combination_dict = {}
-        for day in range(1, 8):
-            for interval in range(1, 6):
-                combination_dict[(day, interval)] = (day - 1) * 5 + interval
-        return combination_dict
-    
-    def _assign_schedulge_key(self, combination_dict, day, interval):
-        try:
-            key = combination_dict[(day, interval)]
-            return key
-        except:
-            return None
-        
-    def _recode_subject_time_intervals(self, pd_data, day_column, start_column, end_column):
+        if day_str:
+            days = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
+            date_pattern = r'\d{1,2}\.\d{1,2}' 
+            for index, day in enumerate(days):
+                if day in day_str:
+                    contains_date = bool(re.search(date_pattern, day_str))
+                    return index + 1, contains_date
+            return None, False
+        else: 
+            return None, False
 
-        day_column_encoded = day_column + "_encoded"
-        interval_column = "interval_column"
-        schedulge_code = "schedulge_code"
+    def _recode_day_column(self, pd_data, day_column):
+        pd_data[['encoded_day', 'singular event']] = pd_data[day_column].apply(lambda x: pd.Series(self._encode_day(x)))
+        return pd_data
 
-        pd_data[day_column_encoded] = pd_data[day_column].apply(self._encode_day)
-        pd_data[interval_column] = pd_data.apply(lambda x: self._enconde_daytime_interval(x[start_column], x[end_column]), axis=1)
-        combination_dict = self._generate_combination_dict()
-        pd_data[schedulge_code] = pd_data.apply(lambda x: self._assign_schedulge_key(combination_dict, x[day_column_encoded], x[interval_column]), axis=1)
 
-        pd_data.drop([start_column, end_column, interval_column, day_column_encoded])
+
+    def _recode_time_columns(self, split, pd_data, time_column_start, time_column_end):
+        if split:
+            pd_data = self._split_datetime_column(self, pd_data, time_column_start, time_column_end, split)
+
+        pd_data = self._recode_time_column(pd_data, time_column_start)
+        pd_data = self._recode_time_column(pd_data, time_column_end)
 
         return pd_data
+
+    def _recode_time_column(self, pd_data, column):
+
+        new_column_name = column + "_int"
+        pd_data[new_column_name] = pd_data[column].apply(self._recode_time_string)
+        return pd_data
+
+        
+    def _recode_time_string(self, time_string):
+        if time_string:
+            hours, minutes = map(int, time_string.split(':'))
+        
+            total_seconds = hours * 3600 + minutes * 60
+            return total_seconds
+        else:
+            return None
+        
+    def _split_datetime_column(self, pd_data, new_column_start, new_column_end, column):
+        pd_data[new_column_start], pd_data[new_column_end] = zip(*pd_data[column].apply(self._split_time_column))
+        return pd_data
+        
+    def _split_time_column(self, cas):
+        zacatek, konec = cas.split('-', 1)
+        return zacatek, konec
+    
+
+
+
+
+
+
+
+
+
 
     def _create_join_statement(self, config, key, where_statement):
         subquery = 1
@@ -356,7 +392,6 @@ class DatasetMaker():
                 join_statement += f"""{table}."{column}" AS "{table}_{column}", """
 
         return join_statement
-    
 
     def _execute_statement(self, statement):
         query = sql.text(statement)
