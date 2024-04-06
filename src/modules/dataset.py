@@ -107,6 +107,7 @@ class DatasetMaker():
         recode_categorical_variables = addit_info["recode_categorical_variables"]
         recode_day_column = addit_info["recode_day_column"]
         recode_time_column = addit_info["recode_time_column"]
+        split_melt = addit_info["split_melt"]
         
 
         if average:
@@ -130,8 +131,15 @@ class DatasetMaker():
         if split:
             # splits column into 2 colums
             split_column = addit_info["split_column"]
-            split_patterns = addit_info["split_patterns"]
-            pd_data = self._split_column(pd_data, split_column, split_patterns)
+            new_column_1 = addit_info["new_column_1"]
+            new_column_2 = addit_info["new_column_2"]
+            split_pattern = addit_info["split_pattern"]
+            pd_data = self._split_column(pd_data, split_column, new_column_1, new_column_2, split_pattern)
+
+        if split_melt:
+            exclude_cols = addit_info["exclude_cols"]
+            first_value_cols = addit_info["first_value_cols"]
+            pd_data = self._split_melt(pd_data, exclude_cols, first_value_cols)
 
         if agg:
             # aggregation function multiple rows aggregate data into one row single column
@@ -163,14 +171,191 @@ class DatasetMaker():
             pd_data = self._recode_day_column(pd_data, day_column)
 
         if recode_time_column:
-            split = addit_info["split"]
             time_column_start = addit_info["time_column_start"]
             time_column_end = addit_info["time_column_end"]
 
-            pd_data = self._recode_time_columns(split, pd_data, time_column_start, time_column_end)
+            pd_data = self._recode_time_columns(pd_data, time_column_start, time_column_end)
 
         return pd_data
 
+    
+    def _agg_pivot(self, pd_data, id, values):
+
+        values_list = {value: 'sum' for value in values}
+        pd_data = pd_data.groupby(id).agg(values_list).reset_index()
+
+        return pd_data
+    
+
+    def _pivot_table(self, pd_data, index, columns, values, aggfunc):
+
+        pd_data = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc, fill_value=0)
+        pd_data = pd_data.reset_index()
+        
+        pd_data.columns = [f'{col[1]}_{col[0]}' if isinstance(col, tuple) else col for col in pd_data.columns]
+        pd_data.columns = [col.strip('_') for col in pd_data.columns]
+        pd_data.columns = [self._loader._strip_accents(column) for column in pd_data.columns]
+        
+        return pd_data
+    
+    def _bool_map_pivot_table(self, pd_data, index, columns):
+        agg_func = 'first'
+
+        one_hot = pd.get_dummies(pd_data[columns], prefix=columns) 
+        pd_data = pd.concat([pd_data, one_hot], axis=1)
+
+        pd_data = pd_data.groupby(index).agg(agg_func)
+        pd_data.drop(columns=[columns], inplace=True)
+
+        pd_data.reset_index(inplace=True)
+
+        return pd_data
+        
+    def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
+
+        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
+
+        return pd_data
+    
+    
+    def _split_column(self, pd_data, split_column, new_column_1, new_column_2, split_pattern):
+        split_values = pd_data[split_column].str.split(split_pattern, expand=True)
+        pd_data[new_column_1] = split_values[0]  
+        try:
+            pd_data[new_column_2] = split_values[1] 
+        except:
+            print(split_values[0])
+            
+        return pd_data
+    
+    def _sum_columns_into_average(self, pd_data, column_name, columns_to_average):
+
+        pd_data[column_name] = pd_data[columns_to_average].mean(axis=1)
+
+        return pd_data
+    
+    
+    def _recode_categorical_columns(self, pd_data, columns, recoding_dicts):
+        for column in columns:
+            recoding_dict = recoding_dicts[column]
+            pd_data[column] = pd_data[column].map(recoding_dict)
+        return pd_data
+    
+    def _encode_day(self, day_str):
+        if day_str:
+            days = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
+            date_pattern = r'\d{1,2}\.\d{1,2}' 
+            for index, day in enumerate(days):
+                contains_date = bool(re.search(date_pattern, day_str))
+                if day in day_str:
+                    return index + 1, contains_date
+            return None, contains_date
+        else: 
+            return None, False
+
+    def _recode_day_column(self, pd_data, day_column):
+        pd_data[['encoded_day', 'singular event']] = pd_data[day_column].apply(lambda x: pd.Series(self._encode_day(x)))
+        return pd_data
+
+    def _recode_time_columns(self, pd_data, time_column_start, time_column_end):
+
+        pd_data = self._recode_time_column(pd_data, time_column_start)
+        pd_data = self._recode_time_column(pd_data, time_column_end)
+
+        return pd_data
+
+    def _recode_time_column(self, pd_data, column):
+
+        new_column_name = column + "_int"
+        pd_data[new_column_name] = pd_data[column].apply(self._recode_time_string)
+        return pd_data
+
+        
+    def _recode_time_string(self, time_string):
+        if time_string:
+            hours, minutes = map(int, time_string.split(':'))
+        
+            total_seconds = hours * 3600 + minutes * 60
+            return total_seconds
+        else:
+            return None
+        
+    def _split_melt(self, pd_data, exclude_cols, first_value_cols):
+            
+        new_data = {col: [] for col in pd_data.columns} 
+        for index, row in pd_data.iterrows():
+            values_to_split = {} 
+            for col in pd_data.columns:
+                if col in exclude_cols:
+                    continue 
+                values = str(row[col]).split("\n") 
+                if len(values) > 1:
+                    values_to_split[col] = values  
+            
+            if not values_to_split:  
+                for col in pd_data.columns:
+                    new_data[col].append(row[col])
+                continue
+            
+            max_length = max(len(vals) for vals in values_to_split.values())
+            for i in range(max_length):
+                for col, values in values_to_split.items():
+                    if col in first_value_cols:
+                        new_data[col].append(values[0])  
+                    else:
+                        new_data[col].append(values[i] if i < len(values) else '') 
+                for col in pd_data.columns:
+                    if col not in values_to_split:
+                        new_data[col].append(row[col])
+        pd_data = pd.DataFrame(new_data)
+        return pd_data
+
+    def _create_join_statement(self, config, key, where_statement):
+        subquery = 1
+        first_table  = ""         
+        join_statement = f"SELECT * "
+        for index, table in enumerate(config):
+            table_data = self._loader._model_metadata[table]
+            columns = table_data.keys()
+            if index == 0:
+                join_statement += f"FROM ( SELECT "
+                join_statement = self._create_table_aliases(table, columns, join_statement, index)
+                first_table = table
+
+            elif index == 1:
+                join_statement = self._create_table_aliases(table, columns, join_statement, index)
+                join_statement += f"FROM {first_table} as {first_table} "
+                join_statement += f"JOIN {table} as {table} "
+                join_statement += f"""ON {first_table}."{key}" = {table}."{key}" """
+                if where_statement:
+                    join_statement += where_statement.format(first_table)
+                join_statement += f") AS subquery_1 "
+                subquery += 1
+
+            else:
+                join_statement += f"LEFT JOIN ( SELECT "
+                join_statement = self._create_table_aliases(table, columns, join_statement, index)
+                join_statement += f"FROM {table} as {table} "
+                join_statement += f") AS subquery_{subquery} "
+                join_statement += f"ON subquery_1.{first_table}_{key} = subquery_{subquery}.{table}_{key} "
+                subquery += 1
+
+        return join_statement
+    
+    def _create_table_aliases(self, table, columns, join_statement, outer_index):
+        inner_index = 0
+        len_col = len(columns)
+        for column in columns:
+            inner_index += 1
+            column = self._loader._strip_accents(column)
+            if inner_index == len_col and (outer_index % 2 != 0 or outer_index != 0):
+                join_statement += f"""{table}."{column}" AS "{table}_{column}" """
+            else:
+                join_statement += f"""{table}."{column}" AS "{table}_{column}", """
+
+        return join_statement
+    
+    
     def _create_model_metadata(self, config):
         for table_name, columns in config.items():
             class_name = table_name.replace('.', '_')
@@ -221,177 +406,6 @@ class DatasetMaker():
                 self._session.commit()
 
             print(f"Model was populated with table {table}")
-    
-
-    def _agg_pivot(self, pd_data, id, values):
-
-        values_list = {value: 'sum' for value in values}
-        pd_data = pd_data.groupby(id).agg(values_list).reset_index()
-
-        return pd_data
-    
-
-
-    def _pivot_table(self, pd_data, index, columns, values, aggfunc):
-
-        pd_data = pd_data.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc, fill_value=0)
-        pd_data = pd_data.reset_index()
-        
-        pd_data.columns = [f'{col[1]}_{col[0]}' if isinstance(col, tuple) else col for col in pd_data.columns]
-        pd_data.columns = [col.strip('_') for col in pd_data.columns]
-        pd_data.columns = [self._loader._strip_accents(column) for column in pd_data.columns]
-        
-        return pd_data
-    
-    def _bool_map_pivot_table(self, pd_data, index, columns):
-        agg_func = 'first'
-
-        one_hot = pd.get_dummies(pd_data[columns], prefix=columns) 
-        pd_data = pd.concat([pd_data, one_hot], axis=1)
-
-        pd_data = pd_data.groupby(index).agg(agg_func)
-        pd_data.drop(columns=[columns], inplace=True)
-
-        pd_data.reset_index(inplace=True)
-
-        return pd_data
-        
-    def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
-
-        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
-
-        return pd_data
-    
-    
-    def _split_column(self, pd_data, split_column, split_patterns):
-        for pattern, column in split_patterns.items():
-            split_values = pd_data[split_column].str.split(pattern, expand=True)
-            pd_data[column] = split_values[0]  
-            try:
-                pd_data[split_column] = split_values[1] 
-            except:
-                print(split_values[0])
-            
-        return pd_data
-    
-    def _sum_columns_into_average(self, pd_data, column_name, columns_to_average):
-
-        pd_data[column_name] = pd_data[columns_to_average].mean(axis=1)
-
-        return pd_data
-    
-    
-    def _recode_categorical_columns(self, pd_data, columns, recoding_dicts):
-        for column in columns:
-            recoding_dict = recoding_dicts[column]
-            pd_data[column] = pd_data[column].map(recoding_dict)
-        return pd_data
-    
-    def _encode_day(self, day_str):
-        if day_str:
-            days = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
-            date_pattern = r'\d{1,2}\.\d{1,2}' 
-            for index, day in enumerate(days):
-                if day in day_str:
-                    contains_date = bool(re.search(date_pattern, day_str))
-                    return index + 1, contains_date
-            return None, False
-        else: 
-            return None, False
-
-    def _recode_day_column(self, pd_data, day_column):
-        pd_data[['encoded_day', 'singular event']] = pd_data[day_column].apply(lambda x: pd.Series(self._encode_day(x)))
-        return pd_data
-
-
-
-    def _recode_time_columns(self, split, pd_data, time_column_start, time_column_end):
-        if split:
-            pd_data = self._split_datetime_column(self, pd_data, time_column_start, time_column_end, split)
-
-        pd_data = self._recode_time_column(pd_data, time_column_start)
-        pd_data = self._recode_time_column(pd_data, time_column_end)
-
-        return pd_data
-
-    def _recode_time_column(self, pd_data, column):
-
-        new_column_name = column + "_int"
-        pd_data[new_column_name] = pd_data[column].apply(self._recode_time_string)
-        return pd_data
-
-        
-    def _recode_time_string(self, time_string):
-        if time_string:
-            hours, minutes = map(int, time_string.split(':'))
-        
-            total_seconds = hours * 3600 + minutes * 60
-            return total_seconds
-        else:
-            return None
-        
-    def _split_datetime_column(self, pd_data, new_column_start, new_column_end, column):
-        pd_data[new_column_start], pd_data[new_column_end] = zip(*pd_data[column].apply(self._split_time_column))
-        return pd_data
-        
-    def _split_time_column(self, cas):
-        zacatek, konec = cas.split('-', 1)
-        return zacatek, konec
-    
-
-
-
-
-
-
-
-
-
-
-    def _create_join_statement(self, config, key, where_statement):
-        subquery = 1
-        first_table  = ""         
-        join_statement = f"SELECT * "
-        for index, table in enumerate(config):
-            table_data = self._loader._model_metadata[table]
-            columns = table_data.keys()
-            if index == 0:
-                join_statement += f"FROM ( SELECT "
-                join_statement = self._create_table_aliases(table, columns, join_statement, index)
-                first_table = table
-
-            elif index == 1:
-                join_statement = self._create_table_aliases(table, columns, join_statement, index)
-                join_statement += f"FROM {first_table} as {first_table} "
-                join_statement += f"JOIN {table} as {table} "
-                join_statement += f"""ON {first_table}."{key}" = {table}."{key}" """
-                if where_statement:
-                    join_statement += where_statement.format(first_table)
-                join_statement += f") AS subquery_1 "
-                subquery += 1
-
-            else:
-                join_statement += f"LEFT JOIN ( SELECT "
-                join_statement = self._create_table_aliases(table, columns, join_statement, index)
-                join_statement += f"FROM {table} as {table} "
-                join_statement += f") AS subquery_{subquery} "
-                join_statement += f"ON subquery_1.{first_table}_{key} = subquery_{subquery}.{table}_{key} "
-                subquery += 1
-
-        return join_statement
-    
-    def _create_table_aliases(self, table, columns, join_statement, outer_index):
-        inner_index = 0
-        len_col = len(columns)
-        for column in columns:
-            inner_index += 1
-            column = self._loader._strip_accents(column)
-            if inner_index == len_col and (outer_index % 2 != 0 or outer_index != 0):
-                join_statement += f"""{table}."{column}" AS "{table}_{column}" """
-            else:
-                join_statement += f"""{table}."{column}" AS "{table}_{column}", """
-
-        return join_statement
 
     def _execute_statement(self, statement):
         query = sql.text(statement)
