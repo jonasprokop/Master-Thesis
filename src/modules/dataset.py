@@ -23,17 +23,19 @@ class DatasetMaker():
 
         
     def create_datasets(self):
-        #self._create_subjects_dataset()
+        self._create_subjects_dataset()
         self._create_classes_dataset()
         self._create_registrations_dataset()
 
     def _create_subjects_dataset(self):
         config = self._loader._subjects_dataset_tables
         operations =  self._loader._subjects_dataset_operations
-        table_name =  operations["table_name"] 
-        key = operations["key"] 
-        where_statement = operations["where_statement"] 
-        columns_select = operations["columns_select"] 
+        table_name =  self._load_variable_from_(operations, "table_name") 
+        key = self._load_variable_from_(operations, "key") 
+        where_statement = self._load_variable_from_(operations, "where_statement") 
+        columns_select = self._load_variable_from_(operations, "columns_select") 
+        columns_rename = self._load_variable_from_(operations, "columns_rename") 
+
 
         for table, addit_info in config.items():
 
@@ -49,8 +51,12 @@ class DatasetMaker():
 
             pd_data = self._deserialize_json_columns(pd_data)
             
-        #if columns_select:
-            #pd_data = pd_data[[columns_select]]
+        if columns_select:
+            pd_data = pd_data[columns_select]
+
+        if columns_rename:
+            pd_data = pd_data.rename(columns=columns_rename)
+
 
         self._loader.save_table_for_analysis(table_name, pd_data)
 
@@ -60,8 +66,8 @@ class DatasetMaker():
 
         config = self._loader._classes_dataset_tables
         operations =  self._loader._classes_dataset_operations
-        table_name =  operations["table_name"] 
-        columns_select = operations["columns_select"] 
+        table_name =  self._load_variable_from_(operations, "table_name") 
+        columns_select = self._load_variable_from_(operations, "columns_select") 
 
         for table, addit_info in config.items():
 
@@ -69,7 +75,7 @@ class DatasetMaker():
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
             #if columns_select:
-            #   pd_data = pd_data[[columns_select]]
+            #   pd_data = pd_data[columns_select]
 
             self._loader.save_table_for_analysis(table_name, pd_data)
 
@@ -79,8 +85,8 @@ class DatasetMaker():
 
         config = self._loader._registration_dataset_tables
         operations =  self._loader._registration_dataset_operations
-        table_name =  operations["table_name"] 
-        columns_select = operations["columns_select"] 
+        table_name =  self._load_variable_from_(operations, "table_name") 
+        columns_select = self._load_variable_from_(operations, "columns_select")  
 
         
         for table, addit_info in config.items():
@@ -90,7 +96,7 @@ class DatasetMaker():
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
             #if columns_select:
-            #   pd_data = pd_data[[columns_select]]
+            #   pd_data = pd_data[columns_select]
 
             self._loader.save_table_for_analysis(table_name, pd_data)
 
@@ -98,30 +104,31 @@ class DatasetMaker():
 
 
     def _preprocess_data(self, pd_data, table, addit_info):
-        pivot = addit_info["pivot"]
-        remap = addit_info["remap"]
-        agg = addit_info["agg"]
-        split = addit_info["split"]
-        bool_map_pivot = addit_info["bool_map_pivot"]
-        average = addit_info["average"]
+        pivot = self._load_variable_from_(addit_info, "pivot") 
+        remap = self._load_variable_from_(addit_info, "remap") 
+        agg = self._load_variable_from_(addit_info, "agg") 
+        split = self._load_variable_from_(addit_info, "split") 
+        bool_map_pivot = self._load_variable_from_(addit_info, "bool_map_pivot") 
+        average = self._load_variable_from_(addit_info, "average") 
+        avg = self._load_variable_from_(addit_info, "avg") 
 
-        recode_categorical_variables = addit_info["recode_categorical_variables"]
-        recode_day_column = addit_info["recode_day_column"]
-        recode_time_column = addit_info["recode_time_column"]
-        split_melt = addit_info["split_melt"]
-        sum_and_subtract = addit_info["sum_and_subtract"]
+        recode_categorical_variables = self._load_variable_from_(addit_info, "recode_categorical_variables") 
+        recode_day_column = self._load_variable_from_(addit_info, "recode_day_column") 
+        recode_time_column = self._load_variable_from_(addit_info, "recode_time_column") 
+        split_melt = self._load_variable_from_(addit_info, "split_melt") 
+        sum_and_subtract = self._load_variable_from_(addit_info, "sum_and_subtract") 
         
 
         if average:
-            column_name_average = addit_info["column_name_average"]
-            columns_to_average = addit_info["columns_to_average"]
-            pd_data = self._sum_columns_into_average(self, pd_data, column_name_average, columns_to_average)
+            column_name_average = self._load_variable_from_(addit_info, "column_name_average") 
+            columns_to_average = self._load_variable_from_(addit_info, "columns_to_average") 
+            pd_data = self._average_columns(pd_data, column_name_average, columns_to_average)
 
         if remap:
             # pivot with dimensionality reduction based on join to other table
-            remap_columns = addit_info["remap_columns"]
-            remap_tables = addit_info["remap_tables"]
-            remap_keys = addit_info["remap_keys"]
+            remap_columns = self._load_variable_from_(addit_info, "remap_columns")
+            remap_tables = self._load_variable_from_(addit_info, "remap_tables")
+            remap_keys = self._load_variable_from_(addit_info, "remap_keys")
 
             for column in remap_columns:
                 remap_table = remap_tables[column]
@@ -132,63 +139,78 @@ class DatasetMaker():
 
         if split:
             # splits column into 2 colums
-            split_column = addit_info["split_column"]
-            new_column_1 = addit_info["new_column_1"]
-            new_column_2 = addit_info["new_column_2"]
-            split_pattern = addit_info["split_pattern"]
+            split_column = self._load_variable_from_(addit_info, "split_column")
+            new_column_1 = self._load_variable_from_(addit_info, "new_column_1")
+            new_column_2 = self._load_variable_from_(addit_info, "new_column_2")
+            split_pattern = self._load_variable_from_(addit_info, "split_pattern")
             pd_data = self._split_column(pd_data, split_column, new_column_1, new_column_2, split_pattern)
 
         if split_melt:
-            exclude_cols = addit_info["exclude_cols"]
-            first_value_cols = addit_info["first_value_cols"]
+            exclude_cols = self._load_variable_from_(addit_info, "exclude_cols")
+            first_value_cols = self._load_variable_from_(addit_info, "first_value_cols")
             pd_data = self._split_melt(pd_data, exclude_cols, first_value_cols)
 
         if agg:
             # aggregation function multiple rows aggregate data into one row single column
-            id = addit_info["agg_index"]
-            agg_values = addit_info["agg_columns"]
-            pd_data = self._agg_pivot(pd_data, id, agg_values)
+            id = self._load_variable_from_(addit_info, "agg_index")
+            agg_columns = self._load_variable_from_(addit_info, "agg_columns")
+            pd_data = self._agg_pivot(pd_data, id, agg_columns)
+
+
+        if avg:
+            id = self._load_variable_from_(addit_info, "avg_index")
+            avg_columns = self._load_variable_from_(addit_info, "avg_columns")
+            pd_data = self._avg_pivot(pd_data, id, avg_columns)
+
 
         if pivot:
             # sum pivot function
-            index = addit_info["pivot_index"]
-            columns = addit_info["pivot_columns"]
-            values = addit_info["pivot_values"]
+            pivot_index = self._load_variable_from_(addit_info, "pivot_index")
+            pivot_columns = self._load_variable_from_(addit_info, "pivot_columns")
+            pivot_values = self._load_variable_from_(addit_info, "pivot_values")
             aggfunc='sum'
-            pd_data = self._pivot_table(pd_data, index, columns, values, aggfunc)
+            pd_data = self._pivot_table(pd_data, pivot_index, pivot_columns, pivot_values, aggfunc)
 
         if bool_map_pivot:
             # bool pivot function
-            index = addit_info["bool_map_pivot_index"]
-            columns = addit_info["bool_map_pivot_columns"]
-            pd_data = self._bool_map_pivot_table(pd_data, index, columns)
+            bool_map_pivot_index = self._load_variable_from_(addit_info, "bool_map_pivot_index")
+            bool_map_pivot_columns = self._load_variable_from_(addit_info, "bool_map_pivot_columns")
+            pd_data = self._bool_map_pivot_table(pd_data, bool_map_pivot_index, bool_map_pivot_columns)
         
         if sum_and_subtract:
-            summation_column = addit_info["summation_column"]
-            columns_to_sum = addit_info["columns_to_sum"]
-            subtracted_column = addit_info["subtracted_column"]
-            columns_to_subtract = addit_info["columns_to_subtract"]
+            summation_column = self._load_variable_from_(addit_info, "summation_column")
+            columns_to_sum = self._load_variable_from_(addit_info, "columns_to_sum")
+            subtracted_column =self._load_variable_from_(addit_info, "subtracted_column")
+            columns_to_subtract = self._load_variable_from_(addit_info, "columns_to_subtract")
 
             pd_data = self._sum_columns(pd_data, summation_column, columns_to_sum)
             pd_data = self._subtract_column(pd_data, subtracted_column, columns_to_subtract)
 
 
         if recode_day_column:
-            day_column = addit_info["day_column"]
+            day_column = self._load_variable_from_(addit_info, "day_column")
             pd_data = self._recode_day_column(pd_data, day_column)
 
         if recode_time_column:
-            time_column_start = addit_info["time_column_start"]
-            time_column_end = addit_info["time_column_end"]
+            time_column_start = self._load_variable_from_(addit_info, "time_column_start")
+            time_column_end =self._load_variable_from_(addit_info, "time_column_end")
 
         if recode_categorical_variables:
-            categorical_columns = addit_info["categorical_columns"]
-            recoding_dicts = addit_info["recoding_dicts"]
+            categorical_columns = self._load_variable_from_(addit_info, "categorical_columns")
+            recoding_dicts = self._load_variable_from_(addit_info, "recoding_dicts")
             pd_data = self._recode_categorical_columns(pd_data, categorical_columns, recoding_dicts)
 
             pd_data = self._recode_time_columns(pd_data, time_column_start, time_column_end)
 
         return pd_data
+    
+    def _load_variable_from_(self, dictionary, variable):
+        try:
+            value = dictionary[variable]
+            return value
+        except:
+            return None
+
     
     def _sum_columns(self, pd_data, summation_column, columns_to_sum):
         pd_data[summation_column] = pd_data[columns_to_sum].sum(axis=1)
@@ -199,12 +221,20 @@ class DatasetMaker():
         return pd_data
 
     
-    def _agg_pivot(self, pd_data, id, values):
+    def _agg_pivot(self, pd_data, agg_index, values):
 
         values_list = {value: 'sum' for value in values}
-        pd_data = pd_data.groupby(id).agg(values_list).reset_index()
+        pd_data = pd_data.groupby(agg_index).agg(values_list).reset_index()
 
         return pd_data
+    
+    def _avg_pivot(self, pd_data, avg_index, values):
+
+        values_list = {value: 'mean' for value in values}
+        pd_data = pd_data.groupby(avg_index).agg(values_list).reset_index()
+
+        return pd_data
+    
     
 
     def _pivot_table(self, pd_data, index, columns, values, aggfunc):
@@ -248,7 +278,7 @@ class DatasetMaker():
             
         return pd_data
     
-    def _sum_columns_into_average(self, pd_data, column_name, columns_to_average):
+    def _average_columns(self, pd_data, column_name, columns_to_average):
 
         pd_data[column_name] = pd_data[columns_to_average].mean(axis=1)
 
@@ -432,7 +462,6 @@ class DatasetMaker():
         with self._sqlalchemy_engine.begin() as session:
             result = session.execute(query)  
             pd_data = pd.DataFrame(result.fetchall(), columns=result.keys())
-            print(pd_data)
         return pd_data
     
     def _deserialize_json_columns(self, pd_data):
