@@ -96,6 +96,7 @@ class DatasetMaker():
 
         print(f"{table_name} was created and saved into parquet")
 
+
     def _preprocess_data(self, pd_data, table, addit_info):
         pivot = addit_info["pivot"]
         remap = addit_info["remap"]
@@ -108,6 +109,7 @@ class DatasetMaker():
         recode_day_column = addit_info["recode_day_column"]
         recode_time_column = addit_info["recode_time_column"]
         split_melt = addit_info["split_melt"]
+        sum_and_subtract = addit_info["sum_and_subtract"]
         
 
         if average:
@@ -160,11 +162,16 @@ class DatasetMaker():
             index = addit_info["bool_map_pivot_index"]
             columns = addit_info["bool_map_pivot_columns"]
             pd_data = self._bool_map_pivot_table(pd_data, index, columns)
+        
+        if sum_and_subtract:
+            summation_column = addit_info["summation_column"]
+            columns_to_sum = addit_info["columns_to_sum"]
+            subtracted_column = addit_info["subtracted_column"]
+            columns_to_subtract = addit_info["columns_to_subtract"]
 
-        if recode_categorical_variables:
-            categorical_columns = addit_info["categorical_columns"]
-            recoding_dicts = addit_info["recoding_dicts"]
-            pd_data = self._recode_categorical_columns(pd_data, categorical_columns, recoding_dicts)
+            pd_data = self._sum_columns(pd_data, summation_column, columns_to_sum)
+            pd_data = self._subtract_column(pd_data, subtracted_column, columns_to_subtract)
+
 
         if recode_day_column:
             day_column = addit_info["day_column"]
@@ -174,8 +181,21 @@ class DatasetMaker():
             time_column_start = addit_info["time_column_start"]
             time_column_end = addit_info["time_column_end"]
 
+        if recode_categorical_variables:
+            categorical_columns = addit_info["categorical_columns"]
+            recoding_dicts = addit_info["recoding_dicts"]
+            pd_data = self._recode_categorical_columns(pd_data, categorical_columns, recoding_dicts)
+
             pd_data = self._recode_time_columns(pd_data, time_column_start, time_column_end)
 
+        return pd_data
+    
+    def _sum_columns(self, pd_data, summation_column, columns_to_sum):
+        pd_data[summation_column] = pd_data[columns_to_sum].sum(axis=1)
+        return pd_data
+
+    def _subtract_column(self, pd_data, subtracted_column, columns_to_subtract):
+        pd_data[subtracted_column] = pd_data[columns_to_subtract[0]] - pd_data[columns_to_subtract[1]]
         return pd_data
 
     
