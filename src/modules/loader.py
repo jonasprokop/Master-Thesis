@@ -27,6 +27,8 @@ class Loader():
         classes_dataset_operations = os.environ.get("CLASSES_DATASET_OPERATIONS")
         registration_dataset_tables = os.environ.get("REGISTRATION_DATASET_TABLES")
         registration_dataset_operations = os.environ.get("REGISTRATION_DATASET_OPERATIONS")
+        final_tables = os.environ.get("FINAL_TABLES")
+        
 
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
@@ -39,6 +41,7 @@ class Loader():
         self._classes_dataset_operations = self._load_yaml(classes_dataset_operations)
         self._registration_dataset_tables = self._load_json(registration_dataset_tables)
         self._registration_dataset_operations = self._load_yaml(registration_dataset_operations)
+        self._final_tables = self._load_yaml(final_tables )
 
 
     def load_and_save_dataset(self):

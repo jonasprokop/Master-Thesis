@@ -21,11 +21,48 @@ class DatasetMaker():
         self._base.metadata.bind = self._sqlalchemy_engine 
         self._tables_populated = []
 
+
         
     def create_datasets(self):
         self._create_subjects_dataset()
         self._create_classes_dataset()
         self._create_registrations_dataset()
+        self._create_final_datasets()
+
+    def _create_final_datasets(self):
+        config = self._loader._final_tables
+        for table in config:
+            table_config = config[table]
+            join_table =  self._load_variable_from_(table_config, "table_name") 
+            keys = self._load_variable_from_(table_config, "keys") 
+
+            columns_select = self._load_variable_from_(table_config, "columns_select") 
+            columns_rename = self._load_variable_from_(table_config, "columns_rename") 
+
+            pd_data_table = self._loader.load_table_for_analysis(table)
+            pd_data_join_table = self._loader.load_table_for_analysis(join_table)
+
+            self._populate_table_with_data(table, pd_data_table)
+            self._populate_table_with_data(join_table, pd_data_join_table)
+
+            join_statement = self._create_join_statement([table, join_table], keys)
+
+            pd_data = self._execute_statement(join_statement)
+
+            pd_data = self._deserialize_json_columns(pd_data)
+            
+            if columns_select:
+                pd_data = pd_data[columns_select]
+
+            if columns_rename:
+                pd_data = pd_data.rename(columns=columns_rename)
+
+            table += "_joined"
+
+            self._loader.save_table_for_analysis(table, pd_data)
+
+            print(f"{table} was created and saved into parquet")
+
 
     def _create_subjects_dataset(self):
         config = self._loader._subjects_dataset_tables
@@ -67,17 +104,22 @@ class DatasetMaker():
         config = self._loader._classes_dataset_tables
         operations =  self._loader._classes_dataset_operations
         table_name =  self._load_variable_from_(operations, "table_name") 
+        key = self._load_variable_from_(operations, "key") 
         columns_select = self._load_variable_from_(operations, "columns_select") 
+        columns_rename = self._load_variable_from_(operations, "columns_rename") 
 
         for table, addit_info in config.items():
 
             pd_data = self._loader.load_raw_table(table)
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
-            #if columns_select:
-            #   pd_data = pd_data[columns_select]
+        if columns_select:
+            pd_data = pd_data[columns_select]
 
-            self._loader.save_table_for_analysis(table_name, pd_data)
+        if columns_rename:
+            pd_data = pd_data.rename(columns=columns_rename)
+
+        self._loader.save_table_for_analysis(table_name, pd_data)
 
         print(f"{table_name} was created and saved into parquet")
 
@@ -86,7 +128,9 @@ class DatasetMaker():
         config = self._loader._registration_dataset_tables
         operations =  self._loader._registration_dataset_operations
         table_name =  self._load_variable_from_(operations, "table_name") 
-        columns_select = self._load_variable_from_(operations, "columns_select")  
+        key = self._load_variable_from_(operations, "key") 
+        columns_select = self._load_variable_from_(operations, "columns_select") 
+        columns_rename = self._load_variable_from_(operations, "columns_rename")  
 
         
         for table, addit_info in config.items():
@@ -95,10 +139,14 @@ class DatasetMaker():
             
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
-            #if columns_select:
-            #   pd_data = pd_data[columns_select]
+        if columns_select:
+            pd_data = pd_data[columns_select]
 
-            self._loader.save_table_for_analysis(table_name, pd_data)
+        if columns_rename:
+            pd_data = pd_data.rename(columns=columns_rename)
+
+
+        self._loader.save_table_for_analysis(table_name, pd_data)
 
         print(f"{table_name} was created and saved into parquet")
 
@@ -194,13 +242,12 @@ class DatasetMaker():
         if recode_time_column:
             time_column_start = self._load_variable_from_(addit_info, "time_column_start")
             time_column_end =self._load_variable_from_(addit_info, "time_column_end")
+            pd_data = self._recode_time_columns(pd_data, time_column_start, time_column_end)
 
         if recode_categorical_variables:
             categorical_columns = self._load_variable_from_(addit_info, "categorical_columns")
             recoding_dicts = self._load_variable_from_(addit_info, "recoding_dicts")
             pd_data = self._recode_categorical_columns(pd_data, categorical_columns, recoding_dicts)
-
-            pd_data = self._recode_time_columns(pd_data, time_column_start, time_column_end)
 
         return pd_data
     
@@ -360,11 +407,42 @@ class DatasetMaker():
         pd_data = pd.DataFrame(new_data)
         return pd_data
 
-    def _create_join_statement(self, config, key, where_statement):
+    def _create_join_statement(self, config, keys, where_statement=None):
         subquery = 1
         first_table  = ""         
         join_statement = f"SELECT * "
+        first_join = ""
+        second_join = ""
         for index, table in enumerate(config):
+            if len(keys) == 1:
+                key = keys[0]
+                first_join = f"""ON {first_table}."{key}" = {table}."{key}" """
+                second_join = f"ON subquery_1.{first_table}_{key} = subquery_{subquery}.{table}_{key} "
+            if len(keys) == 2:
+                key_1 = keys[0]
+                key_2 = keys[1]
+                first_join = f"""
+                                ON {first_table}."{key_1}" = {table}."{key_1}" AND
+                                {first_table}."{key_2}" = {table}."{key_2}" 
+                """
+                second_join = f"""
+                                ON subquery_1."{first_table}_{key_1}" = subquery_{subquery}."{table}_{key_1}" AND
+                                subquery_1."{first_table}_{key_2}" = subquery_{subquery}."{table}_{key_2}"
+                """
+            if len(keys) == 3:
+                key_1 = keys[0]
+                key_2 = keys[1]
+                key_3 = keys[3]
+                first_join = f"""
+                                ON {first_table}."{key_1}" = {table}."{key_1}" AND
+                                {first_table}."{key_2}" = {table}."{key_2}" AND
+                                {first_table}."{key_3}" = {table}."{key_3}" 
+                """
+                second_join = f"""
+                                ON subquery_1."{first_table}_{key_1}" = subquery_{subquery}."{table}_{key_1}" AND
+                                subquery_1."{first_table}_{key_2}" = subquery_{subquery}."{table}_{key_2}" AND
+                                subquery_1."{first_table}_{key_3}" = subquery_{subquery}."{table}_{key_3}"
+                """
             table_data = self._loader._model_metadata[table]
             columns = table_data.keys()
             if index == 0:
@@ -375,8 +453,8 @@ class DatasetMaker():
             elif index == 1:
                 join_statement = self._create_table_aliases(table, columns, join_statement, index)
                 join_statement += f"FROM {first_table} as {first_table} "
-                join_statement += f"JOIN {table} as {table} "
-                join_statement += f"""ON {first_table}."{key}" = {table}."{key}" """
+                join_statement += f"LEFT JOIN {table} as {table} "
+                join_statement += first_join
                 if where_statement:
                     join_statement += where_statement.format(first_table)
                 join_statement += f") AS subquery_1 "
@@ -387,7 +465,7 @@ class DatasetMaker():
                 join_statement = self._create_table_aliases(table, columns, join_statement, index)
                 join_statement += f"FROM {table} as {table} "
                 join_statement += f") AS subquery_{subquery} "
-                join_statement += f"ON subquery_1.{first_table}_{key} = subquery_{subquery}.{table}_{key} "
+                join_statement += second_join
                 subquery += 1
 
         return join_statement
