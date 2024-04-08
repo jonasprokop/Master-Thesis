@@ -36,9 +36,6 @@ class DatasetMaker():
             join_table =  self._load_variable_from_(table_config, "table_name") 
             keys = self._load_variable_from_(table_config, "keys") 
 
-            columns_select = self._load_variable_from_(table_config, "columns_select") 
-            columns_rename = self._load_variable_from_(table_config, "columns_rename") 
-
             pd_data_table = self._loader.load_table_for_analysis(table)
             pd_data_join_table = self._loader.load_table_for_analysis(join_table)
 
@@ -50,16 +47,12 @@ class DatasetMaker():
             pd_data = self._execute_statement(join_statement)
 
             pd_data = self._deserialize_json_columns(pd_data)
-            
-            if columns_select:
-                pd_data = pd_data[columns_select]
 
-            if columns_rename:
-                pd_data = pd_data.rename(columns=columns_rename)
+            pd_data = self._post_process_data(table, table_config, pd_data)
 
-            table += "_joined"
+            table_name_final = table + "_final"
 
-            self._loader.save_table_for_analysis(table, pd_data)
+            self._loader.save_table_for_analysis(table_name_final, pd_data)
 
             print(f"{table} was created and saved into parquet")
 
@@ -70,9 +63,6 @@ class DatasetMaker():
         table_name =  self._load_variable_from_(operations, "table_name") 
         key = self._load_variable_from_(operations, "key") 
         where_statement = self._load_variable_from_(operations, "where_statement") 
-        columns_select = self._load_variable_from_(operations, "columns_select") 
-        columns_rename = self._load_variable_from_(operations, "columns_rename") 
-
 
         for table, addit_info in config.items():
 
@@ -87,37 +77,24 @@ class DatasetMaker():
             pd_data = self._execute_statement(join_statement)
 
             pd_data = self._deserialize_json_columns(pd_data)
-            
-        if columns_select:
-            pd_data = pd_data[columns_select]
 
-        if columns_rename:
-            pd_data = pd_data.rename(columns=columns_rename)
-
+            pd_data = self._post_process_data(table, operations, pd_data)
 
         self._loader.save_table_for_analysis(table_name, pd_data)
 
         print(f"{table_name} was created and saved into parquet")
 
     def _create_classes_dataset(self):
-
         config = self._loader._classes_dataset_tables
         operations =  self._loader._classes_dataset_operations
         table_name =  self._load_variable_from_(operations, "table_name") 
-        key = self._load_variable_from_(operations, "key") 
-        columns_select = self._load_variable_from_(operations, "columns_select") 
-        columns_rename = self._load_variable_from_(operations, "columns_rename") 
 
         for table, addit_info in config.items():
 
             pd_data = self._loader.load_raw_table(table)
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
-        if columns_select:
-            pd_data = pd_data[columns_select]
-
-        if columns_rename:
-            pd_data = pd_data.rename(columns=columns_rename)
+        pd_data = self._post_process_data(table, operations, pd_data)
 
         self._loader.save_table_for_analysis(table_name, pd_data)
 
@@ -128,27 +105,51 @@ class DatasetMaker():
         config = self._loader._registration_dataset_tables
         operations =  self._loader._registration_dataset_operations
         table_name =  self._load_variable_from_(operations, "table_name") 
-        key = self._load_variable_from_(operations, "key") 
-        columns_select = self._load_variable_from_(operations, "columns_select") 
-        columns_rename = self._load_variable_from_(operations, "columns_rename")  
 
         
         for table, addit_info in config.items():
 
             pd_data = self._loader.load_raw_table(table)
-            
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
-        if columns_select:
-            pd_data = pd_data[columns_select]
-
-        if columns_rename:
-            pd_data = pd_data.rename(columns=columns_rename)
+        pd_data = self._post_process_data(table, operations, pd_data)
 
 
         self._loader.save_table_for_analysis(table_name, pd_data)
 
         print(f"{table_name} was created and saved into parquet")
+
+    def _post_process_data(self, table, table_config, pd_data):
+        columns_select = self._load_variable_from_(table_config, "columns_select") 
+        columns_rename = self._load_variable_from_(table_config, "columns_rename") 
+
+        recode_categorical_variables = self._load_variable_from_(table_config, "recode_categorical_variables") 
+        recode_day_column = self._load_variable_from_(table_config, "recode_day_column") 
+        recode_time_column = self._load_variable_from_(table_config, "recode_time_column") 
+        if columns_select:
+            pd_data = pd_data[columns_select]
+
+        if columns_rename:
+
+            pd_data = pd_data.rename(columns=columns_rename)
+        
+        if recode_categorical_variables:
+            table_name_not_recoded = table + "_not_recoded"
+            self._loader.save_table_for_analysis(table_name_not_recoded, pd_data)
+            categorical_columns = self._load_variable_from_(table_config, "categorical_columns")
+            recoding_dicts = self._load_variable_from_(table_config, "recoding_dicts")
+            pd_data = self._recode_categorical_columns(pd_data, categorical_columns, recoding_dicts)
+
+        if recode_day_column:
+            day_column = self._load_variable_from_(table_config, "day_column")
+            pd_data = self._recode_day_column(pd_data, day_column)
+
+        if recode_time_column:
+            time_column_start = self._load_variable_from_(table_config, "time_column_start")
+            time_column_end =self._load_variable_from_(table_config, "time_column_end")
+            pd_data = self._recode_time_columns(pd_data, time_column_start, time_column_end)
+
+        return pd_data
 
 
     def _preprocess_data(self, pd_data, table, addit_info):
@@ -159,10 +160,6 @@ class DatasetMaker():
         bool_map_pivot = self._load_variable_from_(addit_info, "bool_map_pivot") 
         average = self._load_variable_from_(addit_info, "average") 
         avg = self._load_variable_from_(addit_info, "avg") 
-
-        recode_categorical_variables = self._load_variable_from_(addit_info, "recode_categorical_variables") 
-        recode_day_column = self._load_variable_from_(addit_info, "recode_day_column") 
-        recode_time_column = self._load_variable_from_(addit_info, "recode_time_column") 
         split_melt = self._load_variable_from_(addit_info, "split_melt") 
         sum_and_subtract = self._load_variable_from_(addit_info, "sum_and_subtract") 
         
@@ -234,20 +231,6 @@ class DatasetMaker():
             pd_data = self._sum_columns(pd_data, summation_column, columns_to_sum)
             pd_data = self._subtract_column(pd_data, subtracted_column, columns_to_subtract)
 
-
-        if recode_day_column:
-            day_column = self._load_variable_from_(addit_info, "day_column")
-            pd_data = self._recode_day_column(pd_data, day_column)
-
-        if recode_time_column:
-            time_column_start = self._load_variable_from_(addit_info, "time_column_start")
-            time_column_end =self._load_variable_from_(addit_info, "time_column_end")
-            pd_data = self._recode_time_columns(pd_data, time_column_start, time_column_end)
-
-        if recode_categorical_variables:
-            categorical_columns = self._load_variable_from_(addit_info, "categorical_columns")
-            recoding_dicts = self._load_variable_from_(addit_info, "recoding_dicts")
-            pd_data = self._recode_categorical_columns(pd_data, categorical_columns, recoding_dicts)
 
         return pd_data
     
@@ -351,7 +334,7 @@ class DatasetMaker():
             return None, False
 
     def _recode_day_column(self, pd_data, day_column):
-        pd_data[['encoded_day', 'singular event']] = pd_data[day_column].apply(lambda x: pd.Series(self._encode_day(x)))
+        pd_data[[day_column, 'jednorazova_akce']] = pd_data[day_column].apply(lambda x: pd.Series(self._encode_day(x)))
         return pd_data
 
     def _recode_time_columns(self, pd_data, time_column_start, time_column_end):
@@ -363,8 +346,7 @@ class DatasetMaker():
 
     def _recode_time_column(self, pd_data, column):
 
-        new_column_name = column + "_int"
-        pd_data[new_column_name] = pd_data[column].apply(self._recode_time_string)
+        pd_data[column] = pd_data[column].apply(self._recode_time_string)
         return pd_data
 
         
