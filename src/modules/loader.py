@@ -28,6 +28,7 @@ class Loader():
         registration_dataset_tables = os.environ.get("REGISTRATION_DATASET_TABLES")
         registration_dataset_operations = os.environ.get("REGISTRATION_DATASET_OPERATIONS")
         final_tables = os.environ.get("FINAL_TABLES")
+        statistical_analysis = os.environ.get("STATISTICAL_ANALYSIS")
         
 
         self._azure_loader = AzureLoader(azure_connection_string)
@@ -41,11 +42,12 @@ class Loader():
         self._classes_dataset_operations = self._load_yaml(classes_dataset_operations)
         self._registration_dataset_tables = self._load_json(registration_dataset_tables)
         self._registration_dataset_operations = self._load_yaml(registration_dataset_operations)
-        self._final_tables = self._load_yaml(final_tables )
+        self._final_tables = self._load_yaml(final_tables)
+        self._statistical_analysis = self._load_json(statistical_analysis)
 
 
     def load_and_save_dataset(self):
-        self._save_tables_from_db(self._mapper)
+        #self._save_tables_from_db(self._mapper)
         self._save_tables_from_excel(self._excel_data)
 
     
@@ -75,7 +77,7 @@ class Loader():
                 partial_tables.append(partial_table)
             
             if partial_tables:
-                pd_data = pd.concat(partial_tables, axis=0, ignore_index=True)
+                pd_data = pd.concat(partial_tables, axis=0, ignore_index=True, join='outer')
                 pd_data.columns = [self._strip_accents(column) for column in pd_data.columns]
                 print(f"I have succesfully concatened {table}")
                 self._save_raw_table(table, pd_data)
