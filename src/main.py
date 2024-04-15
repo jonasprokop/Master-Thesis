@@ -1,14 +1,13 @@
-import pandas as pd
-
 from modules.loader import Loader
 from modules.analysis import FeatureAnalysis
 from modules.dataset import DatasetMaker
+from modules.models import Models
 
 
 reload_dataset = False
-remake_dataset = True
+remake_dataset = False
 analyze_dataset = True
-save_analysis = False
+model = True
 analysis_target = "Classes_not_recoded"
 
 if __name__ == "__main__":
@@ -23,9 +22,16 @@ if __name__ == "__main__":
     if remake_dataset:
         dataset.create_datasets()
 
+    feature_analysis = FeatureAnalysis(loader, dataset, analysis_target)
+
     if analyze_dataset:
-        feature_analysis = FeatureAnalysis(loader, dataset, analysis_target)
         feature_analysis._analyse_dataset()
+
+    models = Models(dataset)
+
+
+
+
 
 
 

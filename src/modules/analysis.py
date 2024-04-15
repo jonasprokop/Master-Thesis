@@ -67,16 +67,21 @@ class FeatureAnalysis():
                 missing_values = pd_data[column].isnull().sum()
                 
                 frequencies = pd_data[column].value_counts()
-                frequencies_results.append({
-                    'Variable': column,
-                    'Frequencies': frequencies
-                })
+                
+                for category, frequency in frequencies.items():
+                    frequencies_results.append({
+                        'Variable': f"{column}_{category}",
+                        'Frequencies': frequency
+                    })
 
                 proportions = frequencies / len(pd_data[column])
-                proportions_results.append({
-                    'Variable': column,
-                    'Proportions': proportions
-                })
+
+                for category, proportion in proportions.items():
+                    proportions_results.append({
+                        'Variable': f"{column}_{category}",
+                        'Frequencies': proportion
+                    })
+
 
                 categorical_results.append({
                     'Variable': column,
@@ -85,10 +90,10 @@ class FeatureAnalysis():
                     'Missing Values': missing_values
                 })
 
-            pd_data_numerical_results = pd.DataFrame(numerical_results)
-            pd_data_categorical_results = pd.DataFrame(categorical_results)
-            pd_data_frequencies_results = pd.concat([pd.DataFrame(d) for d in frequencies_results], ignore_index=True)
-            pd_data_proportions_results = pd.concat([pd.DataFrame(d) for d in proportions_results], ignore_index=True)
+        pd_data_numerical_results = pd.DataFrame(numerical_results)
+        pd_data_categorical_results = pd.DataFrame(categorical_results)
+        pd_data_frequencies_results = pd.DataFrame(frequencies_results)
+        pd_data_proportions_results = pd.DataFrame(proportions_results)
 
         return [pd_data_numerical_results, pd_data_categorical_results, pd_data_frequencies_results, pd_data_proportions_results]
     
