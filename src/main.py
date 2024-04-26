@@ -5,9 +5,9 @@ from modules.models import Models
 
 
 reload_dataset = False
-remake_dataset = False
+remake_dataset = True
 analyze_dataset = True
-model = True
+model = False
 analysis_target = "Classes_not_recoded"
 
 if __name__ == "__main__":

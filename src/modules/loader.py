@@ -29,8 +29,8 @@ class Loader():
         registration_dataset_operations = os.environ.get("REGISTRATION_DATASET_OPERATIONS")
         final_tables = os.environ.get("FINAL_TABLES")
         statistical_analysis = os.environ.get("STATISTICAL_ANALYSIS")
+        additional_data = os.environ.get("ADDITIONAL_DATA")
         
-
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
         self._model_metadata = self._load_json(model_metadata)
@@ -44,16 +44,18 @@ class Loader():
         self._registration_dataset_operations = self._load_yaml(registration_dataset_operations)
         self._final_tables = self._load_yaml(final_tables)
         self._statistical_analysis = self._load_json(statistical_analysis)
-
+        self._additional_data = self._load_json(additional_data)
 
     def load_and_save_dataset(self):
-        #self._save_tables_from_db(self._mapper)
+        self._save_tables_from_db(self._mapper)
         self._save_tables_from_excel(self._excel_data)
 
     
     def _save_tables_from_db(self, mapper): 
         for table, database_table_name  in mapper.items():
-            query = f"SELECT * FROM {database_table_name}"
+            query = f"""SELECT * FROM {database_table_name}"""
+            if table in ["F_h_pred", "F_pred_prehled", "F_pred_podily"]:
+               query += f"""WHERE "Dataset_ID" in (1,2,5,6,8,9,10)"""
 
             pd_data = self._azure_loader.fetch_from_database(query)
 

@@ -51,8 +51,7 @@ class DatasetOperations(DataModel):
     
     def _bool_map_pivot_table(self, pd_data, index, columns):
         agg_func = 'first'
-
-        one_hot = pd.get_dummies(pd_data[columns], prefix=columns) 
+        one_hot = pd.get_dummies(pd_data[columns], prefix=columns, dummy_na=False) 
         pd_data = pd.concat([pd_data, one_hot], axis=1)
 
         pd_data = pd_data.groupby(index).agg(agg_func)
@@ -64,7 +63,7 @@ class DatasetOperations(DataModel):
         
     def _remap_column(self, pd_data, pd_data_mapper, remap_column, remap_keys):
 
-        pd_data[remap_column] = pd_data[remap_column].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
+        pd_data = self._create_mapped_column(pd_data, pd_data_mapper, remap_column, remap_column, remap_keys)
 
         return pd_data
     
@@ -93,6 +92,11 @@ class DatasetOperations(DataModel):
 
         return pd_data
     
+    def _recode_day_column(self, pd_data, day_column):
+        pd_data[[day_column, 'jednorazova_akce']] = pd_data[day_column].apply(lambda x: pd.Series(self._encode_day(x)))
+
+        return pd_data
+    
     def _encode_day(self, day_str):
 
         if day_str:
@@ -109,23 +113,34 @@ class DatasetOperations(DataModel):
         else: 
             return None, False
 
-    def _recode_day_column(self, pd_data, day_column):
-        pd_data[[day_column, 'jednorazova_akce']] = pd_data[day_column].apply(lambda x: pd.Series(self._encode_day(x)))
-
-        return pd_data
-
     def _recode_time_columns(self, pd_data, time_column_start, time_column_end):
 
-        pd_data = self._recode_time_column(pd_data, time_column_start)
-        pd_data = self._recode_time_column(pd_data, time_column_end)
+        pd_data = self._recode_time_column_end(pd_data, time_column_start, time_column_end)
+        pd_data = self._recode_time_column_start(pd_data, time_column_start)
 
         return pd_data
 
-    def _recode_time_column(self, pd_data, column):
+    def _recode_time_column_start(self, pd_data, column):
 
         pd_data[column] = pd_data[column].apply(self._recode_time_string)
 
         return pd_data
+    
+    def _recode_time_column_end(self, pd_data, time_column_start, time_column_end):
+
+        pd_data[time_column_end] = pd_data.apply(lambda row: self._recode_time_interval(row[time_column_start], row[time_column_end]), axis=1)
+
+        return pd_data
+    
+    def _recode_time_interval(self, start_time, end_time):
+        if start_time and end_time:
+            start_seconds = self._recode_time_string(start_time)
+            end_seconds = self._recode_time_string(end_time)
+
+            duration_seconds = end_seconds - start_seconds
+            return duration_seconds
+        else:
+            return None
 
     def _recode_time_string(self, time_string):
 
@@ -173,6 +188,58 @@ class DatasetOperations(DataModel):
         pd_data = pd.DataFrame(new_data)
 
         return pd_data
+    
+    def _load_additional_data_for_last_year(self, pd_data, table):
+        if table in self._loader._additional_data: 
+            config = self._loader._additional_data[table]
+            pd_data_additional = self._loader._load_excel(config["path"], sheet_name="Sheet1", skiprows=5)
+            pd_data_additional.columns = [self._loader._strip_accents(column) for column in pd_data_additional.columns]
 
+            if config["append"]:
+                additional_data = pd_data_additional
 
-        
+            elif config["split"]:
+                additional_data = pd_data_additional[config["split_column"]]
+
+            else:
+                additional_data = None
+
+        else:
+            additional_data =  None
+
+        if additional_data is not None:
+            new_pd_data = [pd_data, additional_data]
+            pd_data = pd.concat(new_pd_data, axis=0, ignore_index=True, join='outer')
+
+        return pd_data
+    
+
+    def _add_code_columns(self, config, pd_data):
+        code_config = self._load_variable_from_(config, "new_code_column_code_config") 
+        for new_code_column_add_code_colum, part_config in code_config.items():
+            old_column_name_add_code_colum = self._load_variable_from_(part_config, "old_column_name_add_code_colum") 
+            remap_keys_add_code_column = self._load_variable_from_(part_config, "remap_keys_add_code_column")
+            mapper_add_code_column =  self._load_variable_from_(part_config, "mapper_add_code_column")
+            pd_data_mapper = self._loader.load_raw_table(mapper_add_code_column)
+            pd_data = self._create_mapped_column(pd_data, pd_data_mapper, new_code_column_add_code_colum, old_column_name_add_code_colum, remap_keys_add_code_column)
+
+        return pd_data
+
+    def _add_new_categorical_columns(self, config, pd_data):
+        code_config = self._load_variable_from_(config, "add_new_categorical_column_code_config") 
+        for old_column_name_add_new_categorical_column, part_config in code_config.items():
+            if old_column_name_add_new_categorical_column in pd_data.columns:
+                new_column_name_add_new_categorical_column = self._load_variable_from_(part_config, "new_column_name_add_new_categorical_column") 
+                remap_keys_add_new_categorical_column = self._load_variable_from_(part_config, "remap_keys_add_new_categorical_column")
+                mapper_add_new_categorical_column =  self._load_variable_from_(part_config, "mapper_add_new_categorical_column")
+                pd_data_mapper = self._loader.load_raw_table(mapper_add_new_categorical_column)
+                pd_data = self._create_mapped_column(pd_data, pd_data_mapper, new_column_name_add_new_categorical_column, old_column_name_add_new_categorical_column, remap_keys_add_new_categorical_column)
+                            
+        return pd_data
+    
+
+    def _create_mapped_column(self, pd_data, pd_data_mapper, new_code_column, old_column_name, remap_keys):
+        pd_data[new_code_column] = pd_data[old_column_name].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
+        return pd_data
+    
+            

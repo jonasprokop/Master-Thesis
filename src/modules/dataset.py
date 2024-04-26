@@ -1,6 +1,7 @@
 import sqlalchemy as sql
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import pandas as pd
 
 from modules.operations import DatasetOperations
 
@@ -36,17 +37,23 @@ class DatasetMaker(DatasetOperations):
 
             pd_data = self._loader.load_raw_table(table)
 
+            pd_data = self._add_code_columns(addit_info, pd_data)
+
+            pd_data = self._add_new_categorical_columns(addit_info, pd_data)
+
+            pd_data = self._load_additional_data_for_last_year(pd_data, table)
+
             pd_data = self._preprocess_data(pd_data, table, addit_info)
 
             self._populate_table_with_data(table, pd_data)
 
             join_statement = self._create_join_statement(config, key, where_statement)
 
-            pd_data = self._execute_statement(join_statement)
+        pd_data = self._execute_statement(join_statement)
 
-            pd_data = self._deserialize_json_columns(pd_data)
+        pd_data = self._deserialize_json_columns(pd_data)
 
-            pd_data = self._post_process_data(table, operations, pd_data)
+        pd_data = self._post_process_data(table, operations, pd_data)
 
         self._loader.save_table_for_analysis(table_name, pd_data)
 
@@ -97,6 +104,7 @@ class DatasetMaker(DatasetOperations):
             pd_data_join_table = self._loader.load_table_for_analysis(join_table)
 
             self._populate_table_with_data(table, pd_data_table)
+
             self._populate_table_with_data(join_table, pd_data_join_table)
 
             join_statement = self._create_join_statement([table, join_table], keys)
@@ -126,6 +134,7 @@ class DatasetMaker(DatasetOperations):
         sum_and_subtract = self._load_variable_from_(addit_info, "sum_and_subtract") 
 
         if average:
+            # averages values in given columns into a single average column
             column_name_average = self._load_variable_from_(addit_info, "column_name_average") 
             columns_to_average = self._load_variable_from_(addit_info, "columns_to_average") 
             pd_data = self._average_columns(pd_data, column_name_average, columns_to_average)
@@ -200,7 +209,7 @@ class DatasetMaker(DatasetOperations):
         recode_categorical_variables = self._load_variable_from_(table_config, "recode_categorical_variables") 
         recode_day_column = self._load_variable_from_(table_config, "recode_day_column") 
         recode_time_column = self._load_variable_from_(table_config, "recode_time_column") 
-        
+
         if columns_select:
             pd_data = pd_data[columns_select]
 
