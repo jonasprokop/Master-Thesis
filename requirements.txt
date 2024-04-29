@@ -10,3 +10,5 @@ pyyaml
 openpyxl
 matplotlib
 seaborn
+colormath
+minisom

@@ -61,12 +61,12 @@ class DataModel():
         query = sql.text(statement)
 
         with self._sqlalchemy_engine.begin() as session:
-            result = session.execute(query)  
+            result =   session.execute(query)
             pd_data = pd.DataFrame(result.fetchall(), columns=result.keys())
 
         return pd_data
     
-    def _create_join_statement(self, config, keys, where_statement=None):
+    def _create_join_statement(self, config, keys, where_statement=None, left_join = None):
         subquery = 1
         join_statement = None
         select_statement = None
@@ -75,7 +75,7 @@ class DataModel():
 
         for index, table in enumerate(config):
             
-            first_join, second_join, coalesce_statement = self._create_join_and_coalesce_statements(keys, first_table, table, subquery)
+            first_join_statement, second_join_statement, coalesce_statement = self._create_join_and_coalesce_statements(keys, first_table, table, subquery)
 
             table_data = self._loader._model_metadata[table]
             columns = table_data.keys()
@@ -91,12 +91,11 @@ class DataModel():
                 join_statement += coalesce_statement
                 join_statement += f"""
                                     FROM {first_table} as {first_table}
-                                    FULL JOIN {table} as {table}  
-                                        """
-                join_statement += f"""
-                                        """
-                join_statement += first_join
-
+                                    """
+                join_statement += self._return_join_type(left_join)
+                join_statement += f"""{table} as {table}  
+                                            """
+                join_statement += first_join_statement
                 if where_statement:
                     join_statement += where_statement.format(first_table)
 
@@ -104,15 +103,16 @@ class DataModel():
                                         """
                 subquery += 1
             else:
-                join_statement += f"""FULL JOIN ( SELECT 
-                                        """
+                join_statement +=  self._return_join_type(left_join)
+                join_statement += """ ( SELECT  
+                                    """
                 join_statement = self._create_table_aliases(table, columns, join_statement, index, keys)
                 select_statement = self._create_table_select(table, columns, select_statement, index, max_len, subquery, keys)
                 join_statement += f"""
                                 FROM {table} as {table} 
                                 ) AS subquery_{subquery}
                                         """
-                join_statement += second_join
+                join_statement += second_join_statement
 
                 subquery += 1
 
@@ -125,12 +125,12 @@ class DataModel():
         key_1 = keys[0]
         key_2 = keys[1]
 
-        first_join = f"""
+        first_join_statement = f"""
             ON {first_table}."{key_1}" = {table}."{key_1}" AND
             {first_table}."{key_2}" = {table}."{key_2}" 
             """
         
-        second_join = f"""
+        second_join_statement = f"""
             ON subquery_1."{key_1}" = subquery_{subquery}."{table}_{key_1}" AND
             subquery_1."{key_2}" = subquery_{subquery}."{table}_{key_2}"
             """
@@ -138,11 +138,20 @@ class DataModel():
         coalesce_statement = f""",
             COALESCE({first_table}."{key_1}", {table}."{key_1}") AS "{key_1}",
             COALESCE({first_table}."{key_2}", {table}."{key_2}") AS "{key_2}"
-        
             """
-        return first_join, second_join, coalesce_statement
-
+        return first_join_statement, second_join_statement, coalesce_statement
     
+    def _return_join_type(self, left_join):
+        if left_join:
+            join_statement_part = f"""
+                                LEFT JOIN  
+                            """
+        else:
+            join_statement_part = f"""
+                                FULL JOIN
+                            """
+        return join_statement_part
+
     def _create_table_aliases(self, table, columns, join_statement, outer_index, keys=[]):
         inner_index = 0
         len_col = len(columns)

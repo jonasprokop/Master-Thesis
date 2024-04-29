@@ -30,6 +30,7 @@ class Loader():
         final_tables = os.environ.get("FINAL_TABLES")
         statistical_analysis = os.environ.get("STATISTICAL_ANALYSIS")
         additional_data = os.environ.get("ADDITIONAL_DATA")
+        model_data = os.environ.get("MODEL_DATA")
         
         self._azure_loader = AzureLoader(azure_connection_string)
         self._dataset_path = dataset_path
@@ -45,17 +46,24 @@ class Loader():
         self._final_tables = self._load_yaml(final_tables)
         self._statistical_analysis = self._load_json(statistical_analysis)
         self._additional_data = self._load_json(additional_data)
+        self._model_data = self._load_yaml(model_data)
 
     def load_and_save_dataset(self):
         self._save_tables_from_db(self._mapper)
         self._save_tables_from_excel(self._excel_data)
 
     
-    def _save_tables_from_db(self, mapper): 
+    def _save_tables_from_db(self, config): 
+        mapper = config["mapper"]
+        where_statement_config = config["where_statement_config"]
+        where_statement_tables = where_statement_config["where_statement_tables"]
         for table, database_table_name  in mapper.items():
             query = f"""SELECT * FROM {database_table_name}"""
-            if table in ["F_h_pred", "F_pred_prehled", "F_pred_podily"]:
-               query += f"""WHERE "Dataset_ID" in (1,2,5,6,8,9,10)"""
+            if table in where_statement_tables:
+                where_statement_table_config = where_statement_config[table]
+                where_statement_column = where_statement_table_config["where_statement_column"]
+                where_statement_condition = where_statement_table_config["where_statement_condition"]
+                query += f"""WHERE "{where_statement_column}" in {where_statement_condition}"""
 
             pd_data = self._azure_loader.fetch_from_database(query)
 
@@ -83,6 +91,32 @@ class Loader():
                 pd_data.columns = [self._strip_accents(column) for column in pd_data.columns]
                 print(f"I have succesfully concatened {table}")
                 self._save_raw_table(table, pd_data)
+
+
+    def _load_additional_data_for_last_year(self, pd_data, table):
+
+        if table in self._additional_data: 
+            config = self._additional_data[table]
+            pd_data_additional = self._load_excel(config["path"], sheet_name="Sheet1", skiprows=5)
+            pd_data_additional.columns = [self._strip_accents(column) for column in pd_data_additional.columns]
+
+            if config["append"]:
+                additional_data = pd_data_additional
+
+            elif config["split"]:
+                additional_data = pd_data_additional[config["split_column"]]
+
+            else:
+                additional_data = None
+
+        else:
+            additional_data =  None
+
+        if additional_data is not None:
+            new_pd_data = [pd_data, additional_data]
+            pd_data = pd.concat(new_pd_data, axis=0, ignore_index=True, join='outer')
+
+        return pd_data
 
     def load_raw_table(self, table):
         path = self._dataset_path + "/raw-tables/" + table 

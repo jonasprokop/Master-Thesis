@@ -4,161 +4,150 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import chi2_contingency
 from scipy.stats import pearsonr
+import pandas as pd
+import datetime
+import numpy as np 
+import matplotlib.pyplot as plt 
+from sklearn.cluster import DBSCAN 
+from sklearn.preprocessing import StandardScaler 
+from sklearn.preprocessing import normalize 
+from sklearn.decomposition import PCA 
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples, silhouette_score
+import numpy as np
+import seaborn as sns
+from sklearn.datasets import load_digits
+from sklearn.feature_selection import SelectKBest, chi2
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from itertools import product
+import numpy as np
+import pandas as pd
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score
+from sklearn.metrics import pairwise_distances
 
 
-class FeatureAnalysis():
+class DescriptiveAnalysis():
     def __init__(self,
-                loader,
                 dataset,
                 analysis_target
                 ):
         
-        self._loader = loader    
+        analysis_target_final = analysis_target + "_final"
+        analysis_target_not_recoded = analysis_target + "_not_recoded"
+        
+        try:
+            pd_data = dataset._loader.load_table_for_analysis(analysis_target_final)
+        except:
+            ValueError("Table for analysis not yet created")
+
+        try:
+            pd_data_not_recoded = dataset._loader.load_table_for_analysis(analysis_target_not_recoded)
+        except:
+            ValueError("Table for analysis not yet created")
+
+
+        config = dataset._loader._statistical_analysis[analysis_target]
+        select_columns_config = dataset._load_variable_from(config, "variables") 
+        x_config = dataset._load_variable_from(select_columns_config, "x_config") 
+        y_config = dataset._load_variable_from(select_columns_config, "y_config") 
+        desc_config = dataset._load_variable_from(select_columns_config, "desc_config") 
+
+        x_columns, y_columns, desc_columns = self._select_columns_for_use(pd_data, x_config, y_config, desc_config)
+        
         self._analysis_target = analysis_target
         self._dataset = dataset
+        self._pd_data = pd_data
+        self._pd_data_not_recoded = pd_data_not_recoded
+        self._config = config
+        self._x_config = x_config
+        self._y_config = y_config
+        self._desc_config = desc_config
+        self._x_columns = x_columns
+        self._y_columns = y_columns
+        self._desc_columns = desc_columns
 
-    def _analyse_dataset(self):
-        table_config = self._loader._statistical_analysis[self._analysis_target]
-        variables = self._dataset._load_variable_from_(table_config, "variables")
-        correlation_config = self._dataset._load_variable_from_(table_config, "correlation_config")
-        pd_data = self._loader.load_table_for_analysis(self._analysis_target)
+        self._fig_size = (10,6)
 
-        pd_data_variables = self._select_variables(pd_data, variables)
+    def analyse_dataset(self):
+        pca_config = self._dataset._load_variable_from(self._config, "pca_dim_reduction") 
+        n_components = self._dataset._load_variable_from(pca_config, "n_components") 
+        pca, pca_pd_data = self._create_pca(self._x_columns, n_components)
 
-        pd_data_exploration = self._explore_data(pd_data_variables)
+        colour = self._dataset._load_variable_from(pca_config, "colour") 
+        s = self._dataset._load_variable_from(pca_config, "s") 
+        self._plot_pca(pca_pd_data, colour, s)
 
-        self._save_exploration_data(pd_data_exploration)
+        return self._column_summary(self._pd_data_not_recoded, self._x_config, self._y_config, self._desc_config)
 
-        self._create_correlation_plots(pd_data, correlation_config)
-
-    def _select_variables(self, pd_data, variables):
-        pd_data_variables = pd_data[variables]
-        return pd_data_variables
-    
-
-
-    def _explore_data(self, pd_data):
-        numerical_results = []
-        categorical_results = []
-        frequencies_results = []
-        proportions_results = []
-
-        for column in pd_data.columns:
-            if pd.api.types.is_numeric_dtype(pd_data[column]):
-                mean = pd_data[column].mean()
-                median = pd_data[column].median()
-                mode = pd_data[column].mode()[0]
-                std_dev = pd_data[column].std()
-                minimum = pd_data[column].min()
-                maximum = pd_data[column].max()
-                percentile_25 = pd_data[column].quantile(0.25)
-                percentile_50 = pd_data[column].quantile(0.5)
-                percentile_75 = pd_data[column].quantile(0.75)
-                missing_values = pd_data[column].isnull().sum()
-
-                numerical_results.append({
-                    'Variable': column,
-                    'Type': 'Numerical',
-                    'Mean': mean,
-                    'Median': median,
-                    'Std Deviation': std_dev,
-                    'Min': minimum,
-                    'Max': maximum,
-                    '25th Percentile': percentile_25,
-                    '50th Percentile': percentile_50,
-                    '75th Percentile': percentile_75,
-                    'Missing Values': missing_values
-                })
-
-            else:
-                missing_values = pd_data[column].isnull().sum()
-                
-                frequencies = pd_data[column].value_counts()
-                
-                for category, frequency in frequencies.items():
-                    frequencies_results.append({
-                        'Variable': f"{column}_{category}",
-                        'Frequencies': frequency
-                    })
-
-                proportions = frequencies / len(pd_data[column])
-
-                for category, proportion in proportions.items():
-                    proportions_results.append({
-                        'Variable': f"{column}_{category}",
-                        'Frequencies': proportion
-                    })
+    def _select_columns_for_use(self, pd_data, x_config, y_config, desc_config):
+        x_columns = pd_data[x_config]
+        y_columns = pd_data[y_config]
+        desc_columns =pd_data[desc_config]
+        return x_columns, y_columns, desc_columns
 
 
-                categorical_results.append({
-                    'Variable': column,
-                    'Type': 'Categorical',
-                    'Missing Values': missing_values
-                })
+    def _create_pca(self, pd_data, n_components):
+        pca = PCA(n_components=n_components)
+        pca_pd_data = pca.fit_transform(pd_data)
+        return pca, pca_pd_data
 
-        pd_data_numerical_results = pd.DataFrame(numerical_results)
-        pd_data_categorical_results = pd.DataFrame(categorical_results)
-        pd_data_frequencies_results = pd.DataFrame(frequencies_results)
-        pd_data_proportions_results = pd.DataFrame(proportions_results)
-
-        return [pd_data_numerical_results, pd_data_categorical_results, pd_data_frequencies_results, pd_data_proportions_results]
-    
-
-    def _save_exploration_data(self, pd_data_exploration):
-
-        index = 0
-        names_dict = {
-                    0:"numerical_results",
-                    1:"categorical_results",
-                    2:"frequencies_results",
-                    3:"proportions_results"
-            }
-
-        for table in pd_data_exploration:
-            table.to_excel(f"C:/TEMP/{self._analysis_target + names_dict[index]}_excel_statistics.xlsx")
-            index += 1
-
-    def _create_correlation_plots(self, pd_data, correlation_config):
-        for target_column in correlation_config:
-            descriptive_columns = correlation_config[target_column]
-            self._create_correlation_plot(pd_data, target_column, descriptive_columns)
-
-    def _create_correlation_plot(self, pd_data, target_variable, descriptive_variables):
-        data = pd_data[[target_variable] + descriptive_variables]
-        
-        categorical_vars = []
-        continuous_vars = []
-        contingency_tables = []
-        
-        for var in descriptive_variables:
-            try:
-                pd.to_numeric(pd_data[var])
-                continuous_vars.append(var)
-            except ValueError:
-                categorical_vars.append(var)
-        
-        for cat_var in descriptive_variables:
-                crosstab = pd.crosstab(data[target_variable], data[cat_var])
-                chi2, _, _, _ = chi2_contingency(crosstab)
-                cramer_v = np.sqrt(chi2 / (data.shape[0] * (min(crosstab.shape) - 1)))
-                contingency_tables.append(crosstab)
-            
-        combined_crosstab = pd.concat(contingency_tables, axis=1)
-
-        plt.figure(figsize=(12, 8))
-        sns.heatmap(combined_crosstab, annot=True, cmap='coolwarm', fmt="d")
-        plt.title(f'Correlation Plot for {target_variable} and all categorical variables')
-        plt.xlabel('Categorical Variables')
-        plt.ylabel(target_variable)
+    def _plot_pca(self, pca_pd_data, colour, s):
+        plt.figure(figsize=self._fig_size)
+        plt.scatter(pca_pd_data[:, 0], pca_pd_data[:, 1], c=colour, s=s)
+        plt.title('Bodový graf datových bodů v první a druhé hlavní komponentě získané z PCA')
+        plt.xlabel('PCA 1')
+        plt.ylabel('PCA 2')
+        plt.legend()
+        plt.grid(True)
         plt.show()
 
-        for cont_var in continuous_vars:
-            pearson_corr, _ = pearsonr(data[target_variable], data[cont_var])
+    def _column_summary(self, pd_data, columns_list_x, columns_list_y, columns_list_desc):
+        summaries = []
+        for column in pd_data.columns:
+            cluster_summary = {}
+            skip_value = False
+            if column in columns_list_x:
+                type = "Nezávislá"
+            elif column in columns_list_y:
+                type = "Závislá"
+            elif column in columns_list_desc:
+                type = "Popisná"
+            else:
+                skip_value = True
 
-            plt.figure(figsize=(8, 6))
-            sns.scatterplot(x=data[target_variable], y=data[cont_var])
-            plt.title(f'Correlation Plot for {target_variable} and {cont_var} (Pearson Correlation: {pearson_corr:.2f})')
-            plt.xlabel(target_variable)
-            plt.ylabel(cont_var)
-            plt.show()
+            if not skip_value:
+
+                cluster_summary["Jméno sloupce"] = column
+
+                cluster_summary["Typ proměnné"] = type
+
+                try:
+                    pd_data[column] = pd_data[column].apply(int)
+                    mean_value = round(pd_data[column].mean(), 0)
+                    cluster_summary["Typ sloupce"] = "kontinuální"
+                    cluster_summary["Střední hodnota"] = mean_value
+                    cluster_summary["Nejčestnější hodnoty"] = "X"
+                    isna = pd_data[column].isna().sum()
+                    cluster_summary["Počet chybějících hodnot"] = isna
+                except:
+                    value_counts = pd_data[column].value_counts().head(3).index.tolist()
+                    value_counts = [str(x) for x in value_counts if x not in [None, '-', 0, "?", "??"]]
+                    top_values = ", ".join(value_counts)
+                    cluster_summary["Typ sloupce"] = "kategorická"
+                    cluster_summary["Nejčestnější hodnoty"] = top_values
+                    cluster_summary["Střední hodnota"] = "X"
+                    isna = pd_data[column].isna().sum()
+                    cluster_summary["Počet chybějících hodnot"] = isna
+
+                summaries.append(cluster_summary)
+
+        summary_pd_data = pd.DataFrame(summaries)
+        ordered_data = summary_pd_data.sort_values(by='Typ proměnné', ascending=False)
+        path_analysis = f"C://TEMP/{self._analysis_target}_analysis_result.xlsx"
+        ordered_data.to_excel(path_analysis)
 

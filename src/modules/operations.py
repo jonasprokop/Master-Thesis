@@ -1,11 +1,13 @@
 
 import pandas as pd
+from sklearn.decomposition import PCA 
+from sklearn.preprocessing import StandardScaler 
 import re
 
 from modules.sql_model import DataModel
 
 class DatasetOperations(DataModel):
-    def _load_variable_from_(self, dictionary, variable):
+    def _load_variable_from(self, dictionary, variable):
 
         try:
             value = dictionary[variable]
@@ -19,19 +21,18 @@ class DatasetOperations(DataModel):
 
         return pd_data
 
-    def _subtract_column(self, pd_data, subtracted_column, columns_to_subtract):
+    def _subtract_columns(self, pd_data, subtracted_column, columns_to_subtract):
         pd_data[subtracted_column] = pd_data[columns_to_subtract[0]] - pd_data[columns_to_subtract[1]]
-
         return pd_data
 
-    def _agg_pivot(self, pd_data, agg_index, values):
+    def _aggregate(self, pd_data, agg_index, values):
 
         values_list = {value: 'sum' for value in values}
         pd_data = pd_data.groupby(agg_index).agg(values_list).reset_index()
 
         return pd_data
     
-    def _avg_pivot(self, pd_data, avg_index, values):
+    def _average_in_target_value(self, pd_data, avg_index, values):
 
         values_list = {value: 'mean' for value in values}
         pd_data = pd_data.groupby(avg_index).agg(values_list).reset_index()
@@ -188,50 +189,27 @@ class DatasetOperations(DataModel):
         pd_data = pd.DataFrame(new_data)
 
         return pd_data
-    
-    def _load_additional_data_for_last_year(self, pd_data, table):
-        if table in self._loader._additional_data: 
-            config = self._loader._additional_data[table]
-            pd_data_additional = self._loader._load_excel(config["path"], sheet_name="Sheet1", skiprows=5)
-            pd_data_additional.columns = [self._loader._strip_accents(column) for column in pd_data_additional.columns]
-
-            if config["append"]:
-                additional_data = pd_data_additional
-
-            elif config["split"]:
-                additional_data = pd_data_additional[config["split_column"]]
-
-            else:
-                additional_data = None
-
-        else:
-            additional_data =  None
-
-        if additional_data is not None:
-            new_pd_data = [pd_data, additional_data]
-            pd_data = pd.concat(new_pd_data, axis=0, ignore_index=True, join='outer')
-
-        return pd_data
-    
 
     def _add_code_columns(self, config, pd_data):
-        code_config = self._load_variable_from_(config, "new_code_column_code_config") 
+        code_config = self._load_variable_from(config, "new_code_column_code_config") 
+
         for new_code_column_add_code_colum, part_config in code_config.items():
-            old_column_name_add_code_colum = self._load_variable_from_(part_config, "old_column_name_add_code_colum") 
-            remap_keys_add_code_column = self._load_variable_from_(part_config, "remap_keys_add_code_column")
-            mapper_add_code_column =  self._load_variable_from_(part_config, "mapper_add_code_column")
+            old_column_name_add_code_colum = self._load_variable_from(part_config, "old_column_name_add_code_colum") 
+            remap_keys_add_code_column = self._load_variable_from(part_config, "remap_keys_add_code_column")
+            mapper_add_code_column =  self._load_variable_from(part_config, "mapper_add_code_column")
             pd_data_mapper = self._loader.load_raw_table(mapper_add_code_column)
             pd_data = self._create_mapped_column(pd_data, pd_data_mapper, new_code_column_add_code_colum, old_column_name_add_code_colum, remap_keys_add_code_column)
 
         return pd_data
 
     def _add_new_categorical_columns(self, config, pd_data):
-        code_config = self._load_variable_from_(config, "add_new_categorical_column_code_config") 
+        code_config = self._load_variable_from(config, "add_new_categorical_column_code_config") 
+
         for old_column_name_add_new_categorical_column, part_config in code_config.items():
             if old_column_name_add_new_categorical_column in pd_data.columns:
-                new_column_name_add_new_categorical_column = self._load_variable_from_(part_config, "new_column_name_add_new_categorical_column") 
-                remap_keys_add_new_categorical_column = self._load_variable_from_(part_config, "remap_keys_add_new_categorical_column")
-                mapper_add_new_categorical_column =  self._load_variable_from_(part_config, "mapper_add_new_categorical_column")
+                new_column_name_add_new_categorical_column = self._load_variable_from(part_config, "new_column_name_add_new_categorical_column") 
+                remap_keys_add_new_categorical_column = self._load_variable_from(part_config, "remap_keys_add_new_categorical_column")
+                mapper_add_new_categorical_column =  self._load_variable_from(part_config, "mapper_add_new_categorical_column")
                 pd_data_mapper = self._loader.load_raw_table(mapper_add_new_categorical_column)
                 pd_data = self._create_mapped_column(pd_data, pd_data_mapper, new_column_name_add_new_categorical_column, old_column_name_add_new_categorical_column, remap_keys_add_new_categorical_column)
                             
@@ -242,4 +220,26 @@ class DatasetOperations(DataModel):
         pd_data[new_code_column] = pd_data[old_column_name].map(pd_data_mapper.set_index(remap_keys[0])[remap_keys[1]])
         return pd_data
     
-            
+    def _fill_nan_values(self, pd_data):
+        pd_data.fillna(value=0, inplace=True)
+        return pd_data
+    
+    def _pca_dim_reduction(self, pd_data, columns_to_combine, final_dim, new_column_names):
+
+        columns_to_pca = pd_data[columns_to_combine]
+        pca = PCA(n_components=final_dim)
+        columns_pca = pca.fit_transform(columns_to_pca)
+
+        pd_data[new_column_names] = columns_pca
+
+        pd_data.drop(columns=columns_to_combine, inplace=True)
+        return pd_data
+                
+    def _scale_and_concat(self, pd_data, columns_select):
+        scaler = StandardScaler()
+        scaled_data = scaler.fit_transform(pd_data[columns_select])
+        pd_data_scaled = pd.DataFrame(scaled_data, columns=columns_select)
+        pd_data_scaled.columns = columns_select
+        pd_data.drop(columns=columns_select, inplace=True)
+        pd_data_concatenated = pd.concat([pd_data, pd_data_scaled], axis=1)
+        return pd_data_concatenated
