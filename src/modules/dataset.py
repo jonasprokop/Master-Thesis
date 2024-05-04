@@ -135,13 +135,11 @@ class DatasetMaker(DatasetOperations):
         sum_and_subtract = self._load_variable_from(addit_info, "sum_and_subtract") 
 
         if average:
-            # averages values in given columns into a single average column
             column_name_average = self._load_variable_from(addit_info, "column_name_average") 
             columns_to_average = self._load_variable_from(addit_info, "columns_to_average") 
             pd_data = self._average_columns(pd_data, column_name_average, columns_to_average)
 
         if remap:
-            # pivot with dimensionality reduction based on join to other table
             remap_columns = self._load_variable_from(addit_info, "remap_columns")
             remap_tables = self._load_variable_from(addit_info, "remap_tables")
             remap_keys = self._load_variable_from(addit_info, "remap_keys")
@@ -154,7 +152,6 @@ class DatasetMaker(DatasetOperations):
 
 
         if split:
-            # splits column into 2 colums
             split_column = self._load_variable_from(addit_info, "split_column")
             new_column_1 = self._load_variable_from(addit_info, "new_column_1")
             new_column_2 = self._load_variable_from(addit_info, "new_column_2")
@@ -167,7 +164,6 @@ class DatasetMaker(DatasetOperations):
             pd_data = self._split_melt(pd_data, exclude_cols, first_value_cols)
 
         if agg:
-            # aggregation function multiple rows aggregate data into one row single column
             id = self._load_variable_from(addit_info, "agg_index")
             agg_columns = self._load_variable_from(addit_info, "agg_columns")
             pd_data = self._aggregate(pd_data, id, agg_columns)
@@ -178,7 +174,6 @@ class DatasetMaker(DatasetOperations):
             pd_data = self._average_in_target_value(pd_data, id, avg_columns)
 
         if pivot:
-            # sum pivot function
             pivot_index = self._load_variable_from(addit_info, "pivot_index")
             pivot_columns = self._load_variable_from(addit_info, "pivot_columns")
             pivot_values = self._load_variable_from(addit_info, "pivot_values")
@@ -186,7 +181,6 @@ class DatasetMaker(DatasetOperations):
             pd_data = self._pivot_table(pd_data, pivot_index, pivot_columns, pivot_values, aggfunc)
 
         if bool_map_pivot:
-            # bool pivot function
             bool_map_pivot_index = self._load_variable_from(addit_info, "bool_map_pivot_index")
             bool_map_pivot_columns = self._load_variable_from(addit_info, "bool_map_pivot_columns")
             pd_data = self._bool_map_pivot_table(pd_data, bool_map_pivot_index, bool_map_pivot_columns)

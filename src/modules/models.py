@@ -1,28 +1,17 @@
-from sklearn.metrics import make_scorer, silhouette_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.cluster import KMeans
 import pandas as pd
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
-from scipy.stats import chi2_contingency
-from scipy.stats import pearsonr
 import pandas as pd
-import datetime
 import numpy as np 
 import matplotlib.pyplot as plt 
 from sklearn.cluster import DBSCAN 
-from sklearn.preprocessing import StandardScaler 
-from sklearn.preprocessing import normalize 
-from sklearn.decomposition import PCA 
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
 import numpy as np
-import seaborn as sns
-from sklearn.datasets import load_digits
-from sklearn.feature_selection import SelectKBest, chi2
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
@@ -120,8 +109,7 @@ class Models(Visuals):
             if analysis_type == "k-means-summary":
                 config = self._analysis._dataset._load_variable_from(self._config, "k_means_cluster_summary")
                 columns_select = self._analysis._dataset._load_variable_from(config, "columns_select")
-                rename_dict = self._analysis._da
-                taset._load_variable_from(config, "rename_dict") 
+                rename_dict = self._analysis._dataset._load_variable_from(config, "rename_dict") 
                 head = self._analysis._dataset._load_variable_from(config, "head") 
                 days_in_week = self._analysis._dataset._load_variable_from(config, "days_in_week")
                 pd_data_cluster_summary = self._create_clusters_summary_k_means(columns_select, rename_dict, head, days_in_week)
@@ -323,7 +311,6 @@ class Models(Visuals):
                         best_model_definiton = result_dict
                 pd_data_scores = pd.DataFrame(scores_list)     
 
-        print(best_model_definiton, pd_data_scores)
         return best_model_definiton, pd_data_scores
     
     def _fit_predict_som(self, pd_data, m, n, train_count):

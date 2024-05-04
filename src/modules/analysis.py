@@ -1,34 +1,9 @@
 import pandas as pd
-import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
-from scipy.stats import chi2_contingency
-from scipy.stats import pearsonr
 import pandas as pd
-import datetime
-import numpy as np 
-import matplotlib.pyplot as plt 
-from sklearn.cluster import DBSCAN 
-from sklearn.preprocessing import StandardScaler 
-from sklearn.preprocessing import normalize 
 from sklearn.decomposition import PCA 
-from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_samples, silhouette_score
-import numpy as np
-import seaborn as sns
-from sklearn.datasets import load_digits
-from sklearn.feature_selection import SelectKBest, chi2
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from itertools import product
-import numpy as np
-import pandas as pd
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.metrics import silhouette_score
-from sklearn.metrics import pairwise_distances
+
+
 
 
 class DescriptiveAnalysis():

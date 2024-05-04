@@ -1,37 +1,11 @@
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.stats import chi2_contingency
-from scipy.stats import pearsonr
-import functools
-import pandas as pd
-import datetime
-import numpy as np 
-import math
 import matplotlib.pyplot as plt 
-from sklearn.cluster import DBSCAN 
-from sklearn.preprocessing import StandardScaler 
-from sklearn.preprocessing import normalize 
-from sklearn.decomposition import PCA 
-from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
 import matplotlib.colors
-from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
-import numpy as np
-import seaborn as sns
-from sklearn.datasets import load_digits
-from sklearn.feature_selection import SelectKBest, chi2
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from itertools import product
 import numpy as np
 import pandas as pd
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.metrics import silhouette_score
-from sklearn.metrics import pairwise_distances
 from colormath.color_objects import HSVColor, sRGBColor
 from colormath.color_conversions import convert_color
 import matplotlib.pyplot as plt
@@ -97,6 +71,7 @@ class Visuals():
                               self._som_colors_list, silhouette_avg, sample_silhouette_values)
     
         plt.show()
+
     def _silhouette_plot(self, pd_data, n_clusters, labels, colors_list, silhouette_avg, sample_silhouette_values):
         fig, ax1 = plt.subplots(1, 1)
         ax1.set_xlim([-0.1, 1])
@@ -288,7 +263,7 @@ class Visuals():
         else:
             return "bez opakování"
         
-    def _plot_dendrogram_hierarchical_clustering(self, pd_data, n_clusters, model, p,cluster_labels,n_colors,label_divisor,x_font_size):
+    def _plot_dendrogram_hierarchical_clustering(self, pd_data, n_clusters, model, p, cluster_labels, n_colors, label_divisor, x_font_size):
 
         linkage_matrix = linkage(pd_data, model.linkage)
         distances = model.distances_
@@ -308,12 +283,12 @@ class Visuals():
         link_cols = {}
         for i, i12 in enumerate(linkage_matrix[:, :2].astype(int)):
             c1, c2 = (link_cols[x] if x > len(linkage_matrix) else color_list[x]
-                      for x in i12)
+                        for x in i12)
             link_cols[i + 1 + len(linkage_matrix)] = c1 if c1 == c2 else 'C0'
         
         plot_dendrogram_with_clusters(model, pd_data, linkage_matrix, truncate_mode='level', p = p, 
-                                      color_threshold = c_treshold, leaf_label_func= lambda id : self._implemented_leaf_label_function(id, x_var, label_divisor),
-                                      leaf_font_size=x_font_size,leaf_rotation=80,link_color_func=lambda x:link_cols[x])
+                                        color_threshold = c_treshold, leaf_label_func= lambda id : self._implemented_leaf_label_function(id, x_var, label_divisor),
+                                        leaf_font_size=x_font_size,leaf_rotation=80,link_color_func=lambda x:link_cols[x])
 
         
         plt.legend(handles=[plt.Line2D([],[],color=color,label="Cluster "+str(label)) for color,label in zip(n_colors[0:n_clusters],range(1,1+n_clusters))],bbox_to_anchor=(1.1,1.15),framealpha=1)
