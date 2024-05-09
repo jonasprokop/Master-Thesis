@@ -3,25 +3,12 @@ from sklearn.cluster import KMeans
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np 
-import matplotlib.pyplot as plt 
 from sklearn.cluster import DBSCAN 
-from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
 from itertools import product
-import numpy as np
-import pandas as pd
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
 from sklearn.metrics import pairwise_distances
-
 from modules.visuals import Visuals
 from minisom import MiniSom
 from collections import Counter

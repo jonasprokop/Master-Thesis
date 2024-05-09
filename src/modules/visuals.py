@@ -3,12 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import matplotlib.colors
 from sklearn.metrics import silhouette_samples, silhouette_score
-import pandas as pd
-import numpy as np
-import pandas as pd
 from colormath.color_objects import HSVColor, sRGBColor
 from colormath.color_conversions import convert_color
-import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage
 from collections import Counter
 
@@ -311,7 +307,6 @@ class Visuals():
         explained_variances = pca.explained_variance_ratio_
         explained_variance_ratio = explained_variances[0] / explained_variances[1]
         return explained_variance_ratio
-    
 
     def _plot_3d_scatter_categories(self, som, pd_data_not_recoded, pd_data, category):
         values = pd_data.values

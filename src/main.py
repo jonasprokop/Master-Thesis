@@ -29,8 +29,7 @@ if __name__ == "__main__":
 
     if analyze_dataset:
         descriptive_analysis.analyse_dataset()
-
-        
+      
     models = Models(descriptive_analysis)
 
     if model:
